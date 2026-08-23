@@ -4,18 +4,34 @@ import * as path from "path";
 
 // Mapping of internal package names to clean human-readable TUI status names
 const COMMON_NAMES: Record<string, string> = {
-  "plannotator": "plan",
+  plannotator: "plan",
   "plannotator-review": "plan",
   "pi-mcp-adapter": "mcp",
   "subagent-slash": "subagent",
   "subagent-slash-text": "subagent",
   "pi-wechat-assistant": "wechat",
-  "wechat-assistant": "wechat"
+  "wechat-assistant": "wechat",
 };
 
 // Store original statuses to allow dynamic redrawing on configuration changes.
 // Cleaned up on session restart to prevent memory leaks from replaced sessions.
 const originalStatuses = new Map<string, string | undefined>();
+
+// Memoization cache for Google colorized text to reduce GC overhead and theme calls.
+const googleColorizeCache = new Map<string, string>();
+
+// Safe, non-backtracking ReDoS-mitigated ANSI escape sequence matcher (supporting ; and :)
+const ANSI_STRIP_REGEX =
+  /[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g;
+
+// Hoisted regex patterns to prevent instantiation and GC overhead in the render hot-path
+const STATUS_PATTERN =
+  /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋]|[0-9]+\/[0-9]+|active|online|offline|running|paused|error|success|connected|disconnected/i;
+const NAME_SUFFIX_PATTERN = /-(extension|plugin|assistant|adapter|slash-text|slash|text|widget)$/gi;
+const FRACTION_PATTERN = /(\d+\/\d+|\d+%\s*)/;
+const PARENTHESES_PATTERN = /\((\d+)\)/;
+const BRACKET_PATTERN = /\[(\d+)\]/;
+const NUMBER_PATTERN = /\b(\d+)\b/;
 
 // Load settings path
 const home = process.env.HOME || process.env.USERPROFILE || "";
@@ -24,7 +40,7 @@ const settingsPath = path.join(home, ".pi/agent/settings.json");
 // Command-Driven I/O State:
 // Loaded ONCE synchronously during extension loading, thereafter handled entirely in memory.
 // Disk I/O only occurs when the user triggers the "/beautify" selection command.
-let currentStyle = "minimal"; 
+let currentStyle = "minimal";
 
 try {
   if (fs.existsSync(settingsPath)) {
@@ -38,33 +54,46 @@ try {
   // Graceful fallback to default in case of JSON parse or read errors
 }
 
-// Google playful multi-color letter colorizer with type safeguards
-function googleColorize(text: string, theme: any): string {
+// Google playful multi-color letter colorizer with type safeguards and memoization
+export function googleColorize(text: string, theme: any): string {
   if (!theme || typeof theme.fg !== "function") return text;
+
+  const cached = googleColorizeCache.get(text);
+  if (cached !== undefined) return cached;
+
   // Google's brand colors cycle: Blue, Red, Yellow, Green
   const colors = ["accent", "error", "warning", "success"];
-  return text.split("")
+  const colorized = text
+    .split("")
     .map((char, index) => {
       const color = colors[index % colors.length];
       return theme.fg(color, char);
     })
     .join("");
+
+  googleColorizeCache.set(text, colorized);
+  return colorized;
 }
 
 // Clean status text and map state and details
-function beautifyStatus(key: string, originalVal: string | undefined, theme: any, style: string): string | undefined {
+export function beautifyStatus(
+  key: string,
+  originalVal: string | undefined,
+  theme: any,
+  style: string
+): string | undefined {
   if (originalVal === undefined) return undefined;
   if (style === "off") return originalVal; // Pass through untouched if disabled
 
   try {
-    const cleanVal = originalVal.replace(/\x1B\[\d+m/g, "").trim();
+    // Fast-path: bypass Regex search if no ESC or CSI bytes exist to reduce hot redraw latency
+    const hasAnsi = originalVal.includes("\u001B") || originalVal.includes("\u009B");
+    const cleanVal = hasAnsi ? originalVal.replace(ANSI_STRIP_REGEX, "").trim() : originalVal.trim();
+
     if (cleanVal === "") return "";
 
-    // Helper patterns for status indicators
-    const statusPattern = /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋]|[0-9]+\/[0-9]+|active|online|offline|running|paused|error|success|connected|disconnected/i;
-    
     // Safely bypass values that have no status signifiers (such as logs or text widgets)
-    if (!statusPattern.test(cleanVal)) {
+    if (!STATUS_PATTERN.test(cleanVal)) {
       return originalVal;
     }
 
@@ -77,23 +106,21 @@ function beautifyStatus(key: string, originalVal: string | undefined, theme: any
       if (lastSlash !== -1) {
         name = name.slice(lastSlash + 1);
       }
-      name = name
-        .replace(/-(extension|plugin|assistant|adapter|slash-text|slash|text|widget)$/gi, "")
-        .toLowerCase();
+      name = name.replace(NAME_SUFFIX_PATTERN, "").toLowerCase();
       name = name.slice(0, 10);
     }
 
     // 2. Extract metrics/progress details safely (e.g. (2) or fraction 2/5 or count)
     let details: string | undefined;
-    const fractionMatch = cleanVal.match(/(\d+\/\d+|\d+%\s*)/);
+    const fractionMatch = cleanVal.match(FRACTION_PATTERN);
     if (fractionMatch) {
       details = fractionMatch[1];
     } else {
-      const countMatch = cleanVal.match(/\((\d+)\)/) || cleanVal.match(/\[(\d+)\]/);
+      const countMatch = cleanVal.match(PARENTHESES_PATTERN) || cleanVal.match(BRACKET_PATTERN);
       if (countMatch) {
         details = countMatch[1];
       } else {
-        const numberMatch = cleanVal.match(/\b(\d+)\b/);
+        const numberMatch = cleanVal.match(NUMBER_PATTERN);
         if (numberMatch) {
           details = numberMatch[1];
         }
@@ -188,9 +215,7 @@ function beautifyStatus(key: string, originalVal: string | undefined, theme: any
       case "glow": {
         const label = ` ${char}${details ? ` ${details}` : ""} `;
         const hasInverse = theme && typeof theme.inverse === "function";
-        const coloredBadge = (hasInverse && hasThemeFg)
-          ? theme.inverse(theme.fg(state, label))
-          : `[${label}]`;
+        const coloredBadge = hasInverse && hasThemeFg ? theme.inverse(theme.fg(state, label)) : `[${label}]`;
         const dimmedName = hasThemeFg ? theme.fg("muted", name) : name;
         return `${dimmedName} ${coloredBadge}`;
       }
@@ -220,8 +245,9 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     if (!ctx.hasUI || !ctx.ui) return;
 
-    // Flush stale statuses from previous sessions to prevent memory leaks
+    // Flush stale statuses from previous sessions to prevent memory leaks and clear color cache
     originalStatuses.clear();
+    googleColorizeCache.clear();
 
     const originalSetStatus = ctx.ui.setStatus;
     if (originalSetStatus && !(originalSetStatus as any).__beautifierHooked) {
@@ -231,7 +257,7 @@ export default function (pi: ExtensionAPI) {
 
         // Uses in-memory synchronization (zero file I/O overhead on render pipeline ticks)
         const beautified = beautifyStatus(key, value, ctx.ui.theme, currentStyle);
-        
+
         return originalSetStatus.call(ctx.ui, key, beautified);
       };
       (wrapped as any).__beautifierHooked = true;
@@ -246,7 +272,7 @@ export default function (pi: ExtensionAPI) {
       if (!ctx.hasUI || !ctx.ui) {
         return;
       }
-      
+
       const styleOptions = [
         "minimal (Millennial Minimalist - e.g. name ❯ ●)",
         "apple (Apple Cupertino - e.g. name │ ●)",
@@ -257,24 +283,30 @@ export default function (pi: ExtensionAPI) {
         "glass (Charm Glass - e.g. ▕ name ● ▏)",
         "glow (Glow Badge - e.g. name [ ● ])",
         "matrix (Retro Matrix - e.g. name ⦗ ● | 2 ⦘)",
-        "off (use raw output)"
+        "off (use raw output)",
       ];
-      
-      const choice = await ctx.ui.select(
-        `Choose status style (Current: ${currentStyle}):`,
-        styleOptions
-      );
+
+      const choice = await ctx.ui.select(`Choose status style (Current: ${currentStyle}):`, styleOptions);
 
       if (choice) {
         const styleKey = choice.split(" ")[0].trim();
         const validStyles = [
-          "apple", "openai", "anthropic", "google", "microsoft",
-          "minimal", "glass", "glow", "matrix", "off"
+          "apple",
+          "openai",
+          "anthropic",
+          "google",
+          "microsoft",
+          "minimal",
+          "glass",
+          "glow",
+          "matrix",
+          "off",
         ];
-        
+
         if (validStyles.includes(styleKey)) {
           // 1. Instantly update in-memory caching
           currentStyle = styleKey;
+          googleColorizeCache.clear(); // Clear cache when changing style/redrawing to ensure new colors are loaded
           ctx.ui.notify(`TUI status style changed to: ${styleKey}`, "info");
 
           // 2. Redraw TUI indicator widgets instantly on configuration event using cached data
@@ -296,6 +328,6 @@ export default function (pi: ExtensionAPI) {
           }
         }
       }
-    }
+    },
   });
 }
