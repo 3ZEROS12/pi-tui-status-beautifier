@@ -1,0 +1,19 @@
+{
+  "name": "pi-tui-status-beautifier",
+  "version": "1.0.0",
+  "description": "Premium brand & layout status bar beautifier for Pi terminal TUI.",
+  "main": "extensions/tui-status-beautifier.ts",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/tui-status-beautifier.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "author": "Jason",
+  "license": "MIT"
+}
