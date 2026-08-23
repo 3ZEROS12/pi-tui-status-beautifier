@@ -205,6 +205,15 @@ if (isTriggered) {
     execSync('npm publish --registry=https://registry.npmjs.org/ --no-git-checks', { stdio: 'inherit' });
 
     console.log('Live release completed successfully.');
+
+    // Sync updated extension to global directory
+    const globalPath = path.join(process.env.USERPROFILE || process.env.HOME || '', '.pi/agent/extensions/tui-status-beautifier.ts');
+    try {
+      fs.copyFileSync(path.join(__dirname, 'extensions/tui-status-beautifier.ts'), globalPath);
+      console.log(`Successfully synchronized updated extension to global directory: ${globalPath}`);
+    } catch (err) {
+      console.error('Failed to sync updated extension to global directory:', err);
+    }
   } else {
     console.log('No modifications for release. Skipping tag and npm publish.');
   }
