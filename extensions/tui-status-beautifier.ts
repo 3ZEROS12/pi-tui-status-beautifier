@@ -20,6 +20,9 @@ const originalStatuses = new Map<string, string | undefined>();
 // Memoization cache for Google colorized text to reduce GC overhead and theme calls.
 const googleColorizeCache = new Map<string, string>();
 
+// State Cache for Dirty-Checking
+const lastRenderedStatus = new Map<string, string | undefined>();
+
 // Safe, non-backtracking ReDoS-mitigated ANSI escape sequence matcher (supporting ; and :)
 const ANSI_STRIP_REGEX =
   /[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g;
@@ -107,8 +110,9 @@ export function beautifyStatus(
         name = name.slice(lastSlash + 1);
       }
       name = name.replace(NAME_SUFFIX_PATTERN, "").toLowerCase();
-      name = name.slice(0, 10);
     }
+    // Optimization (Finding 5): Use visual cell width calculations rather than standard .length for CJK/emojis
+    const visualName = padToVisualWidth(sliceToVisualWidth(name, 10), 10);
 
     // 2. Extract metrics/progress details safely (e.g. (2) or fraction 2/5 or count)
     let details: string | undefined;
@@ -176,20 +180,20 @@ export function beautifyStatus(
     switch (style) {
       case "apple": {
         const separator = hasThemeFg ? theme.fg("dim", "  │  ") : "  │  ";
-        const dimmedName = hasThemeFg ? theme.fg("dim", name) : name;
+        const dimmedName = hasThemeFg ? theme.fg("dim", visualName) : visualName;
         const detailStr = details ? ` (${details})` : "";
         return `${dimmedName}${separator}${coloredIndicator}${detailStr}`;
       }
       case "openai": {
         const spirograph = hasThemeFg ? theme.fg("success", "❂") : "❂";
         const detailStr = details ? ` [${details}]` : "";
-        const dimmedName = hasThemeFg ? theme.fg("muted", name) : name;
+        const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
         return `${spirograph} ${dimmedName}${detailStr}`;
       }
       case "anthropic": {
         const organicStar = "✦";
         const coloredStar = hasThemeFg ? theme.fg(state, organicStar) : organicStar;
-        const dimmedName = hasThemeFg ? theme.fg("muted", name) : name;
+        const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
         const detailStr = details ? ` ❖ ${details}` : "";
         return `${dimmedName} ${coloredStar}${detailStr}`;
       }
@@ -198,17 +202,17 @@ export function beautifyStatus(
         const detailStr = details ? ` │ ${details}` : "";
         const prefix = hasThemeFg ? theme.fg("dim", "[") : "[";
         const suffix = hasThemeFg ? theme.fg("dim", "]") : "]";
-        return `${windowsLogo} ${prefix}${name}${suffix} ${coloredIndicator}${detailStr}`;
+        return `${windowsLogo} ${prefix}${visualName}${suffix} ${coloredIndicator}${detailStr}`;
       }
       case "google": {
-        const coloredName = googleColorize(name, theme);
+        const coloredName = googleColorize(visualName, theme);
         const detailStr = details ? `:${details}` : "";
         return `${coloredName} ➔ ${coloredIndicator}${detailStr}`;
       }
       case "glass": {
         const prefix = hasThemeFg ? theme.fg("dim", "▕ ") : "▕ ";
         const suffix = hasThemeFg ? theme.fg("dim", " ▏") : " ▏";
-        const dimmedName = hasThemeFg ? theme.fg("muted", name) : name;
+        const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
         const detailStr = details ? ` (${details})` : "";
         return `${prefix}${dimmedName} ${coloredIndicator}${detailStr}${suffix}`;
       }
@@ -216,19 +220,19 @@ export function beautifyStatus(
         const label = ` ${char}${details ? ` ${details}` : ""} `;
         const hasInverse = theme && typeof theme.inverse === "function";
         const coloredBadge = hasInverse && hasThemeFg ? theme.inverse(theme.fg(state, label)) : `[${label}]`;
-        const dimmedName = hasThemeFg ? theme.fg("muted", name) : name;
+        const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
         return `${dimmedName} ${coloredBadge}`;
       }
       case "matrix": {
-        const prefix = hasThemeFg ? theme.fg("dim", " ⦗ ") : " ⦗ ";
-        const suffix = hasThemeFg ? theme.fg("dim", " ⦘") : "  ⦘";
+        const prefix = hasThemeFg ? theme.fg("dim", " \u2397 ") : " \u2397 ";
+        const suffix = hasThemeFg ? theme.fg("dim", " \u2398") : "  \u2398";
         const separator = hasThemeFg ? theme.fg("dim", " | ") : " | ";
         const detailStr = details ? `${separator}${details}` : "";
-        return `${name}${prefix}${coloredIndicator}${detailStr}${suffix}`;
+        return `${visualName}${prefix}${coloredIndicator}${detailStr}${suffix}`;
       }
       case "minimal": {
         const separator = hasThemeFg ? theme.fg("dim", " ❯ ") : " ❯ ";
-        const dimmedName = hasThemeFg ? theme.fg("muted", name) : name;
+        const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
         const detailStr = details ? ` (${details})` : "";
         return `${dimmedName}${separator}${coloredIndicator}${detailStr}`;
       }
@@ -241,6 +245,91 @@ export function beautifyStatus(
   }
 }
 
+/**
+ * Calculates the visual column cell width of a string (Finding 5), taking into account
+ * full-width Unicode characters, East Asian characters, and emojis.
+ */
+export function getStringWidth(str: string): number {
+  if (!str) return 0;
+  // Strip ANSI escape sequences & control codes before counting visual width
+  const clean = str.replace(ANSI_STRIP_REGEX, "");
+  let width = 0;
+  for (let i = 0; i < clean.length; i++) {
+    const code = clean.charCodeAt(i);
+    if (isFullWidth(code)) {
+      width += 2;
+    } else {
+      width += 1;
+    }
+  }
+  return width;
+}
+
+/**
+ * Checks if a character unicode code point is full-width (East Asian Width).
+ */
+function isFullWidth(code: number): boolean {
+  if (isNaN(code)) return false;
+  return (
+    code >= 0x1100 &&
+    (code <= 0x115f ||
+      code === 0x2329 ||
+      code === 0x232a ||
+      // CJK Radicals Supplement .. Enclosed CJK Letters and Months
+      (code >= 0x2e80 && code <= 0x3247 && code !== 0x303f) ||
+      // Enclosed CJK Letters and Months .. CJK Unified Ideographs Extension A
+      (code >= 0x3250 && code <= 0x4dbf) ||
+      // CJK Unified Ideographs .. Yi Radicals
+      (code >= 0x4e00 && code <= 0xa4c6) ||
+      // Hangul Jamo Extended-A
+      (code >= 0xa960 && code <= 0xa97c) ||
+      // Hangul Syllables
+      (code >= 0xac00 && code <= 0xd7a3) ||
+      // CJK Compatibility Ideographs
+      (code >= 0xf900 && code <= 0xfaff) ||
+      // Vertical Forms
+      (code >= 0xfe10 && code <= 0xfe19) ||
+      // CJK Compatibility Forms .. Small Form Variants
+      (code >= 0xfe30 && code <= 0xfe6b) ||
+      // Halfwidth and Fullwidth Forms
+      (code >= 0xff01 && code <= 0xff60) ||
+      (code >= 0xffe0 && code <= 0xffe6) ||
+      // East Asian Wide characters beyond BMP
+      (code >= 0x1b000 && code <= 0x1b001) ||
+      (code >= 0x1f200 && code <= 0x1f251) ||
+      (code >= 0x20000 && code <= 0x3fffd))
+  );
+}
+
+/**
+ * Slices a string to a maximum visual cell width.
+ */
+export function sliceToVisualWidth(str: string, maxWidth: number): string {
+  let width = 0;
+  let sliced = "";
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    const charWidth = isFullWidth(code) ? 2 : 1;
+    if (width + charWidth > maxWidth) {
+      break;
+    }
+    width += charWidth;
+    sliced += str.charAt(i);
+  }
+  return sliced;
+}
+
+/**
+ * Pads a string's visual cell width to target width with trailing spaces.
+ */
+export function padToVisualWidth(str: string, targetWidth: number, padChar = " "): string {
+  const currentWidth = getStringWidth(str);
+  if (currentWidth >= targetWidth) {
+    return str;
+  }
+  return str + padChar.repeat(targetWidth - currentWidth);
+}
+
 export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     if (!ctx.hasUI || !ctx.ui) return;
@@ -248,6 +337,7 @@ export default function (pi: ExtensionAPI) {
     // Flush stale statuses from previous sessions to prevent memory leaks and clear color cache
     originalStatuses.clear();
     googleColorizeCache.clear();
+    lastRenderedStatus.clear();
 
     const originalSetStatus = ctx.ui.setStatus;
     if (originalSetStatus && !(originalSetStatus as any).__beautifierHooked) {
@@ -257,6 +347,13 @@ export default function (pi: ExtensionAPI) {
 
         // Uses in-memory synchronization (zero file I/O overhead on render pipeline ticks)
         const beautified = beautifyStatus(key, value, ctx.ui.theme, currentStyle);
+
+        // Dirty-checking (Finding 6): Skip redundant stdout paint updates
+        const cacheKey = `${key}:${currentStyle}`;
+        if (lastRenderedStatus.get(cacheKey) === beautified) {
+          return;
+        }
+        lastRenderedStatus.set(cacheKey, beautified);
 
         return originalSetStatus.call(ctx.ui, key, beautified);
       };
@@ -307,6 +404,7 @@ export default function (pi: ExtensionAPI) {
           // 1. Instantly update in-memory caching
           currentStyle = styleKey;
           googleColorizeCache.clear(); // Clear cache when changing style/redrawing to ensure new colors are loaded
+          lastRenderedStatus.clear();  // Clear dirty checking cache to force repaint
           ctx.ui.notify(`TUI status style changed to: ${styleKey}`, "info");
 
           // 2. Redraw TUI indicator widgets instantly on configuration event using cached data

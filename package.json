@@ -1,6 +1,6 @@
 {
   "name": "pi-tui-status-beautifier",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Premium brand & layout status bar beautifier for Pi terminal TUI.",
   "main": "extensions/tui-status-beautifier.ts",
   "keywords": [
