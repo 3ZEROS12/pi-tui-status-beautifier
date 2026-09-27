@@ -1,45 +1,31 @@
-# 🎨 Pi TUI Status Beautifier
+# pi-tui-status-beautifier
 
-A premium status bar beautifier extension for the Pi Terminal TUI. Instantly transforms boring status lines into brand-inspired themes and clean layouts.
+Minimalist status bar formatter & AI-customizable layout engine for the [Pi](https://github.com/earendil-works/pi-coding-agent) terminal TUI.
 
-## 🚀 Installation & Usage
+Automatically normalizes verbose extension status strings (`plannotator`, `pi-mcp-adapter`, `pi-subagents`, `toolflow`, etc.) into clean, visually aligned 10-column status badges with zero runtime disk I/O overhead.
 
-Install directly via the Pi package manager:
+## Installation
 
 ```bash
 pi install npm:pi-tui-status-beautifier
 ```
 
-Or install from git:
-```bash
-pi install git:github.com/3ZEROS12/pi-tui-status-beautifier
-```
+## Usage
 
-### Enable/Disable Styles
-Once installed, open the Pi TUI terminal and run the dynamic interactive switch command:
-```bash
-/beautify
-```
-This renders a live selectable menu to instantly toggle between brand themes (`Cupertino`, `OpenAI`, `Claude`, `Microsoft Fluent`, `Material`) and layout styles (`Minimal`, `Glass`, `Glow badge`, `Matrix frame`, or `Default/Off`).
+Run `/beautify` inside Pi to switch status bar layouts or generate a custom style with your AI agent:
 
----
+- **`custom` — [AI Prompt Recipe]**: Pre-fills a structured prompt into your terminal editor so your coding agent can inspect `tui-status-beautifier.ts` and craft a bespoke status bar layout tailored to your exact aesthetic.
+- **`minimal`**: Clean chevron indicator (`name       ❯ ● (2)`)
+- **`glass`**: Framed capsule badge (`▕ name       ● (2) ▏`)
+- **`glow`**: High-contrast inverse pill (`name       [ ● 2 ]`)
+- **`off`**: Pass through raw status strings untouched
 
-## 🎨 Layout Themes
+## Engineering Highlights
 
-* **Minimal (Default)**: `wechat ❯ ●` | `plan ❯ ● (2)`
-* **Glass (毛玻璃)**: `▕ wechat ● ▏`
-* **Glow Badge**: `wechat [ ● ]`
-* **Matrix (机架双线框)**: `wechat ⦗ ● ⦘`
+- **Unicode & Surrogate-Pair Safe**: Full `codePointAt(0)` visual cell width measurement across CJK ideographs, Hiragana/Katakana, Hangul, emojis, and zero-width joiners (`0x200d`, `0xfe0f`).
+- **Zero Render-Loop Disk I/O**: Reads `~/.pi/agent/settings.json` once at startup and performs dirty-checked in-memory rendering; atomic temp-file rename (`writeFileSync` + `renameSync`) only when switching styles via `/beautify`.
+- **ReDoS-Safe ANSI Stripping**: Fast-path bypass when no ESC/CSI bytes are present.
 
-## 🍎 Tech & Brand Themes
+## License
 
-* **Mac Cupertino (`apple`)**: Minimal vertical divider with native traffic-light state dots.
-* **ChatGPT (`openai`)**: Star/spirograph symbol `❂` wrapping plugin indicators in OpenAI Cyan.
-* **Claude Humanist (`anthropic`)**: Artful 4-corner Claude star `✦` styling.
-* **Fluent Microsoft (`microsoft`)**: Flat terminal tile layout using Microsoft Fluent block `⊞`.
-* **Material Google (`google`)**: Google multi-color letters rendering index name values.
-
----
-
-## 🛠️ Contribution & Development
-The core logic resides in `extensions/tui-status-beautifier.ts`. All status mapping is completely memory-cached to eliminate Paint Loop I/O bottlenecks.
+MIT

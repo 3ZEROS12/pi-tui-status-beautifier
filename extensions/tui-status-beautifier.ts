@@ -13,12 +13,10 @@ const COMMON_NAMES: Record<string, string> = {
   "wechat-assistant": "wechat",
 };
 
-// Store original statuses to allow dynamic redrawing on configuration changes.
-// Cleaned up on session restart to prevent memory leaks from replaced sessions.
-const originalStatuses = new Map<string, string | undefined>();
+const VALID_STYLES = ["minimal", "glass", "glow", "off"] as const;
 
-// Memoization cache for Google colorized text to reduce GC overhead and theme calls.
-const googleColorizeCache = new Map<string, string>();
+// Store original statuses to allow dynamic redrawing on configuration changes.
+const originalStatuses = new Map<string, string | undefined>();
 
 // State Cache for Dirty-Checking
 const lastRenderedStatus = new Map<string, string | undefined>();
@@ -29,7 +27,7 @@ const ANSI_STRIP_REGEX =
 
 // Hoisted regex patterns to prevent instantiation and GC overhead in the render hot-path
 const STATUS_PATTERN =
-  /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋]|[0-9]+\/[0-9]+|active|online|offline|running|paused|error|success|connected|disconnected/i;
+  /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋⌬]|[0-9]+\/[0-9]+|active|online|offline|running|paused|error|success|connected|disconnected/i;
 const NAME_SUFFIX_PATTERN = /-(extension|plugin|assistant|adapter|slash-text|slash|text|widget)$/gi;
 const FRACTION_PATTERN = /(\d+\/\d+|\d+%\s*)/;
 const PARENTHESES_PATTERN = /\((\d+)\)/;
@@ -40,9 +38,6 @@ const NUMBER_PATTERN = /\b(\d+)\b/;
 const home = process.env.HOME || process.env.USERPROFILE || "";
 const settingsPath = path.join(home, ".pi/agent/settings.json");
 
-// Command-Driven I/O State:
-// Loaded ONCE synchronously during extension loading, thereafter handled entirely in memory.
-// Disk I/O only occurs when the user triggers the "/beautify" selection command.
 let currentStyle = "minimal";
 
 try {
@@ -50,32 +45,12 @@ try {
     const data = fs.readFileSync(settingsPath, "utf-8");
     const config = JSON.parse(data);
     if (config.beautifier && typeof config.beautifier.style === "string") {
-      currentStyle = config.beautifier.style;
+      const saved = config.beautifier.style;
+      currentStyle = (VALID_STYLES as readonly string[]).includes(saved) ? saved : "minimal";
     }
   }
-} catch (e) {
+} catch (_e) {
   // Graceful fallback to default in case of JSON parse or read errors
-}
-
-// Google playful multi-color letter colorizer with type safeguards and memoization
-export function googleColorize(text: string, theme: any): string {
-  if (!theme || typeof theme.fg !== "function") return text;
-
-  const cached = googleColorizeCache.get(text);
-  if (cached !== undefined) return cached;
-
-  // Google's brand colors cycle: Blue, Red, Yellow, Green
-  const colors = ["accent", "error", "warning", "success"];
-  const colorized = text
-    .split("")
-    .map((char, index) => {
-      const color = colors[index % colors.length];
-      return theme.fg(color, char);
-    })
-    .join("");
-
-  googleColorizeCache.set(text, colorized);
-  return colorized;
 }
 
 // Clean status text and map state and details
@@ -86,16 +61,14 @@ export function beautifyStatus(
   style: string
 ): string | undefined {
   if (originalVal === undefined) return undefined;
-  if (style === "off") return originalVal; // Pass through untouched if disabled
+  if (style === "off") return originalVal;
 
   try {
-    // Fast-path: bypass Regex search if no ESC or CSI bytes exist to reduce hot redraw latency
     const hasAnsi = originalVal.includes("\u001B") || originalVal.includes("\u009B");
     const cleanVal = hasAnsi ? originalVal.replace(ANSI_STRIP_REGEX, "").trim() : originalVal.trim();
 
     if (cleanVal === "") return "";
 
-    // Safely bypass values that have no status signifiers (such as logs or text widgets)
     if (!STATUS_PATTERN.test(cleanVal)) {
       return originalVal;
     }
@@ -111,7 +84,6 @@ export function beautifyStatus(
       }
       name = name.replace(NAME_SUFFIX_PATTERN, "").toLowerCase();
     }
-    // Optimization (Finding 5): Use visual cell width calculations rather than standard .length for CJK/emojis
     const visualName = padToVisualWidth(sliceToVisualWidth(name, 10), 10);
 
     // 2. Extract metrics/progress details safely (e.g. (2) or fraction 2/5 or count)
@@ -141,7 +113,6 @@ export function beautifyStatus(
       valLower.includes("✗") ||
       valLower.includes("offline") ||
       valLower.includes("error") ||
-      valLower.includes("未登录") ||
       valLower.includes("failed")
     ) {
       state = "error";
@@ -160,8 +131,7 @@ export function beautifyStatus(
       valLower.includes("✅") ||
       valLower.includes("✓") ||
       valLower.includes("online") ||
-      valLower.includes("success") ||
-      valLower.includes("已连接")
+      valLower.includes("success")
     ) {
       state = "success";
     } else {
@@ -176,39 +146,8 @@ export function beautifyStatus(
     const hasThemeFg = theme && typeof theme.fg === "function";
     const coloredIndicator = hasThemeFg ? theme.fg(state, char) : char;
 
-    // 5. Render layout presets
+    // 5. Render layout presets (3 curated baseline layouts: minimal, glass, glow)
     switch (style) {
-      case "apple": {
-        const separator = hasThemeFg ? theme.fg("dim", "  │  ") : "  │  ";
-        const dimmedName = hasThemeFg ? theme.fg("dim", visualName) : visualName;
-        const detailStr = details ? ` (${details})` : "";
-        return `${dimmedName}${separator}${coloredIndicator}${detailStr}`;
-      }
-      case "openai": {
-        const spirograph = hasThemeFg ? theme.fg("success", "❂") : "❂";
-        const detailStr = details ? ` [${details}]` : "";
-        const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
-        return `${spirograph} ${dimmedName}${detailStr}`;
-      }
-      case "anthropic": {
-        const organicStar = "✦";
-        const coloredStar = hasThemeFg ? theme.fg(state, organicStar) : organicStar;
-        const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
-        const detailStr = details ? ` ❖ ${details}` : "";
-        return `${dimmedName} ${coloredStar}${detailStr}`;
-      }
-      case "microsoft": {
-        const windowsLogo = hasThemeFg ? theme.fg("accent", "⊞") : "⊞";
-        const detailStr = details ? ` │ ${details}` : "";
-        const prefix = hasThemeFg ? theme.fg("dim", "[") : "[";
-        const suffix = hasThemeFg ? theme.fg("dim", "]") : "]";
-        return `${windowsLogo} ${prefix}${visualName}${suffix} ${coloredIndicator}${detailStr}`;
-      }
-      case "google": {
-        const coloredName = googleColorize(visualName, theme);
-        const detailStr = details ? `:${details}` : "";
-        return `${coloredName} ➔ ${coloredIndicator}${detailStr}`;
-      }
       case "glass": {
         const prefix = hasThemeFg ? theme.fg("dim", "▕ ") : "▕ ";
         const suffix = hasThemeFg ? theme.fg("dim", " ▏") : " ▏";
@@ -223,30 +162,21 @@ export function beautifyStatus(
         const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
         return `${dimmedName} ${coloredBadge}`;
       }
-      case "matrix": {
-        const prefix = hasThemeFg ? theme.fg("dim", " \u2397 ") : " \u2397 ";
-        const suffix = hasThemeFg ? theme.fg("dim", " \u2398") : "  \u2398";
-        const separator = hasThemeFg ? theme.fg("dim", " | ") : " | ";
-        const detailStr = details ? `${separator}${details}` : "";
-        return `${visualName}${prefix}${coloredIndicator}${detailStr}${suffix}`;
-      }
-      case "minimal": {
+      case "minimal":
+      default: {
         const separator = hasThemeFg ? theme.fg("dim", " ❯ ") : " ❯ ";
         const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
         const detailStr = details ? ` (${details})` : "";
         return `${dimmedName}${separator}${coloredIndicator}${detailStr}`;
       }
-      default:
-        return originalVal;
     }
-  } catch (error) {
-    // Resilience fallback: prevent rendering exceptions from ever crashing UI updates
+  } catch (_error) {
     return originalVal;
   }
 }
 
 /**
- * Calculates the visual column cell width of a string (Finding 5), taking into account
+ * Calculates the visual column cell width of a string, taking into account
  * full-width Unicode characters, East Asian ideographs, Kana, Hangul, emojis, and zero-width joiners.
  */
 export function getStringWidth(str: string): number {
@@ -257,7 +187,6 @@ export function getStringWidth(str: string): number {
   for (const char of clean) {
     const code = char.codePointAt(0) || 0;
 
-    // Zero-width characters (ZWJ, variation selectors, combining marks)
     if (
       code === 0x200d ||
       code === 0xfe0f ||
@@ -317,10 +246,16 @@ export function sliceToVisualWidth(str: string, maxWidth: number): string {
 
   for (const char of str) {
     const code = char.codePointAt(0) || 0;
-    const charWidth = (
-      code === 0x200d || code === 0xfe0f || code === 0xfe0e ||
-      (code >= 0x0300 && code <= 0x036f) || (code >= 0x200b && code <= 0x200f)
-    ) ? 0 : (isFullWidth(code) ? 2 : 1);
+    const charWidth =
+      code === 0x200d ||
+      code === 0xfe0f ||
+      code === 0xfe0e ||
+      (code >= 0x0300 && code <= 0x036f) ||
+      (code >= 0x200b && code <= 0x200f)
+        ? 0
+        : isFullWidth(code)
+          ? 2
+          : 1;
 
     if (width + charWidth > maxWidth) {
       break;
@@ -347,21 +282,16 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     if (!ctx.hasUI || !ctx.ui) return;
 
-    // Flush stale statuses from previous sessions to prevent memory leaks and clear color cache
     originalStatuses.clear();
-    googleColorizeCache.clear();
     lastRenderedStatus.clear();
 
     const originalSetStatus = ctx.ui.setStatus;
     if (originalSetStatus && !(originalSetStatus as any).__beautifierHooked) {
       const wrapped = function (key: string, value: string | undefined) {
-        // Track original statuses for dynamic updates
         originalStatuses.set(key, value);
 
-        // Uses in-memory synchronization (zero file I/O overhead on render pipeline ticks)
         const beautified = beautifyStatus(key, value, ctx.ui.theme, currentStyle);
 
-        // Dirty-checking (Finding 6): Skip redundant stdout paint updates
         const cacheKey = `${key}:${currentStyle}`;
         if (lastRenderedStatus.get(cacheKey) === beautified) {
           return;
@@ -377,68 +307,64 @@ export default function (pi: ExtensionAPI) {
 
   // Dynamic status bar style controller registry
   pi.registerCommand("beautify", {
-    description: "Choose TUI status bar beautification style",
-    handler: async (args, ctx) => {
+    description: "Choose TUI status bar beautification style or generate a custom style with AI",
+    handler: async (_args, ctx) => {
       if (!ctx.hasUI || !ctx.ui) {
         return;
       }
 
       const styleOptions = [
-        "minimal (Millennial Minimalist - e.g. name ❯ ●)",
-        "apple (Apple Cupertino - e.g. name │ ●)",
-        "openai (OpenAI Spirograph - e.g. ❂ name)",
-        "anthropic (Anthropic Claude - e.g. name ✦)",
-        "google (Google Playful - e.g. n-a-m-e ➔ ●)",
-        "microsoft (Microsoft Fluent - e.g. ⊞ [name] ●)",
-        "glass (Charm Glass - e.g. ▕ name ● ▏)",
-        "glow (Glow Badge - e.g. name [ ● ])",
-        "matrix (Retro Matrix - e.g. name ⦗ ● | 2 ⦘)",
-        "off (use raw output)",
+        "custom  - [AI Prompt Recipe] Let your agent generate or tailor your own style",
+        "minimal - Clean chevron indicator (e.g. name ❯ ●)",
+        "glass   - Framed capsule badge (e.g. ▕ name ● ▏)",
+        "glow    - High-contrast inverse pill (e.g. name [ ● ])",
+        "off     - Pass through raw status output",
       ];
 
       const choice = await ctx.ui.select(`Choose status style (Current: ${currentStyle}):`, styleOptions);
 
-      if (choice) {
-        const styleKey = choice.split(" ")[0].trim();
-        const validStyles = [
-          "apple",
-          "openai",
-          "anthropic",
-          "google",
-          "microsoft",
-          "minimal",
-          "glass",
-          "glow",
-          "matrix",
-          "off",
-        ];
+      if (!choice) return;
 
-        if (validStyles.includes(styleKey)) {
-          // 1. Instantly update in-memory caching
-          currentStyle = styleKey;
-          googleColorizeCache.clear(); // Clear cache when changing style/redrawing to ensure new colors are loaded
-          lastRenderedStatus.clear();  // Clear dirty checking cache to force repaint
-          ctx.ui.notify(`TUI status style changed to: ${styleKey}`, "info");
+      const styleKey = choice.split(" ")[0].trim();
 
-          // 2. Redraw TUI indicator widgets instantly on configuration event using cached data
-          for (const [key, val] of originalStatuses.entries()) {
-            ctx.ui.setStatus(key, val);
+      if (styleKey === "custom") {
+        const promptRecipe = [
+          "Please customize my Pi TUI status bar style in `tui-status-beautifier.ts`.",
+          "1. Inspect the installed extension (`~/.pi/agent/npm/node_modules/pi-tui-status-beautifier/extensions/tui-status-beautifier.ts` or local repo).",
+          "2. In `beautifyStatus()`, design a bespoke status bar layout matching my taste (custom separators, status glyphs, brackets, and theme colors: accent/success/warning/error/muted/dim).",
+          "3. Apply the new style as default and show me a preview of the updated format."
+        ].join("\n");
+
+        if (typeof (ctx.ui as any).setEditorText === "function") {
+          (ctx.ui as any).setEditorText(promptRecipe);
+          ctx.ui.notify("Custom style prompt loaded into editor. Edit your preferences and press Enter!", "info");
+        } else {
+          ctx.ui.notify(promptRecipe, "info");
+        }
+        return;
+      }
+
+      if ((VALID_STYLES as readonly string[]).includes(styleKey)) {
+        currentStyle = styleKey;
+        lastRenderedStatus.clear();
+        ctx.ui.notify(`TUI status style changed to: ${styleKey}`, "info");
+
+        for (const [key, val] of originalStatuses.entries()) {
+          ctx.ui.setStatus(key, val);
+        }
+
+        try {
+          if (fs.existsSync(settingsPath)) {
+            const data = fs.readFileSync(settingsPath, "utf-8");
+            const config = JSON.parse(data);
+            if (!config.beautifier) config.beautifier = {};
+            config.beautifier.style = styleKey;
+            const tempSettings = `${settingsPath}.tmp.${process.pid}.${Date.now()}`;
+            fs.writeFileSync(tempSettings, JSON.stringify(config, null, 2), "utf-8");
+            fs.renameSync(tempSettings, settingsPath);
           }
-
-          // 3. Command-Driven Disk I/O: Persist settings to disk atomically outside core paint loop
-          try {
-            if (fs.existsSync(settingsPath)) {
-              const data = fs.readFileSync(settingsPath, "utf-8");
-              const config = JSON.parse(data);
-              if (!config.beautifier) config.beautifier = {};
-              config.beautifier.style = styleKey;
-              const tempSettings = `${settingsPath}.tmp.${process.pid}.${Date.now()}`;
-              fs.writeFileSync(tempSettings, JSON.stringify(config, null, 2), "utf-8");
-              fs.renameSync(tempSettings, settingsPath);
-            }
-          } catch (e) {
-            // Silently fail disk write to avoid crashing active user sessions
-          }
+        } catch (_e) {
+          // Silently ignore disk write errors
         }
       }
     },
