@@ -2,10 +2,15 @@
 
 A premium status bar beautifier extension for the Pi Terminal TUI. Instantly transforms boring status lines into brand-inspired themes and clean layouts.
 
-## 🚀 Installation & Usage (Recommended)
+## 🚀 Installation & Usage
 
-Since this package is published on GitHub, you can install it instantly in the Pi TUI command environment using the following single line:
+Install directly via the Pi package manager:
 
+```bash
+pi install npm:pi-tui-status-beautifier
+```
+
+Or install from git:
 ```bash
 pi install git:github.com/3ZEROS12/pi-tui-status-beautifier
 ```

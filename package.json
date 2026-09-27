@@ -11,6 +11,20 @@
       "./extensions/tui-status-beautifier.ts"
     ]
   },
+  "files": [
+    "extensions/tui-status-beautifier.ts",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/3ZEROS12/pi-tui-status-beautifier.git"
+  },
+  "homepage": "https://github.com/3ZEROS12/pi-tui-status-beautifier#readme",
+  "bugs": {
+    "url": "https://github.com/3ZEROS12/pi-tui-status-beautifier/issues"
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
   },
