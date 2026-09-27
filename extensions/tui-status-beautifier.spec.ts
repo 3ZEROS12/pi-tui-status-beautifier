@@ -87,12 +87,17 @@ describe("TUI Status Beautifier Code Optimization Tests", () => {
       expect(getStringWidth("hello")).toBe(5);
       expect(getStringWidth("测试")).toBe(4);
       expect(getStringWidth("测试hello")).toBe(9);
+      expect(getStringWidth("🚀")).toBe(2);
+      expect(getStringWidth("こんにちは")).toBe(10);
+      expect(getStringWidth("안녕하세요")).toBe(10);
     });
 
     it("slices strings to specified visual cell width without cutting characters in half", () => {
       expect(sliceToVisualWidth("hello", 3)).toBe("hel");
       expect(sliceToVisualWidth("测试", 3)).toBe("测");
       expect(sliceToVisualWidth("测试", 4)).toBe("测试");
+      expect(sliceToVisualWidth("🚀💡📌", 4)).toBe("🚀💡");
+      expect(sliceToVisualWidth("🚀a", 2)).toBe("🚀");
     });
 
     it("pads strings to target visual width", () => {

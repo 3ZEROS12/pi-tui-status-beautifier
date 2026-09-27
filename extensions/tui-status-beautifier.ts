@@ -247,75 +247,88 @@ export function beautifyStatus(
 
 /**
  * Calculates the visual column cell width of a string (Finding 5), taking into account
- * full-width Unicode characters, East Asian characters, and emojis.
+ * full-width Unicode characters, East Asian ideographs, Kana, Hangul, emojis, and zero-width joiners.
  */
 export function getStringWidth(str: string): number {
   if (!str) return 0;
-  // Strip ANSI escape sequences & control codes before counting visual width
   const clean = str.replace(ANSI_STRIP_REGEX, "");
   let width = 0;
-  for (let i = 0; i < clean.length; i++) {
-    const code = clean.charCodeAt(i);
+
+  for (const char of clean) {
+    const code = char.codePointAt(0) || 0;
+
+    // Zero-width characters (ZWJ, variation selectors, combining marks)
+    if (
+      code === 0x200d ||
+      code === 0xfe0f ||
+      code === 0xfe0e ||
+      (code >= 0x0300 && code <= 0x036f) ||
+      (code >= 0x200b && code <= 0x200f)
+    ) {
+      continue;
+    }
+
     if (isFullWidth(code)) {
       width += 2;
     } else {
       width += 1;
     }
   }
+
   return width;
 }
 
 /**
  * Checks if a character unicode code point is full-width (East Asian Width).
  */
-function isFullWidth(code: number): boolean {
+export function isFullWidth(code: number): boolean {
   if (isNaN(code)) return false;
   return (
-    code >= 0x1100 &&
-    (code <= 0x115f ||
-      code === 0x2329 ||
-      code === 0x232a ||
-      // CJK Radicals Supplement .. Enclosed CJK Letters and Months
-      (code >= 0x2e80 && code <= 0x3247 && code !== 0x303f) ||
-      // Enclosed CJK Letters and Months .. CJK Unified Ideographs Extension A
-      (code >= 0x3250 && code <= 0x4dbf) ||
-      // CJK Unified Ideographs .. Yi Radicals
-      (code >= 0x4e00 && code <= 0xa4c6) ||
-      // Hangul Jamo Extended-A
-      (code >= 0xa960 && code <= 0xa97c) ||
-      // Hangul Syllables
-      (code >= 0xac00 && code <= 0xd7a3) ||
-      // CJK Compatibility Ideographs
-      (code >= 0xf900 && code <= 0xfaff) ||
-      // Vertical Forms
-      (code >= 0xfe10 && code <= 0xfe19) ||
-      // CJK Compatibility Forms .. Small Form Variants
-      (code >= 0xfe30 && code <= 0xfe6b) ||
-      // Halfwidth and Fullwidth Forms
-      (code >= 0xff01 && code <= 0xff60) ||
-      (code >= 0xffe0 && code <= 0xffe6) ||
-      // East Asian Wide characters beyond BMP
-      (code >= 0x1b000 && code <= 0x1b001) ||
-      (code >= 0x1f200 && code <= 0x1f251) ||
-      (code >= 0x20000 && code <= 0x3fffd))
+    (code >= 0x1100 && code <= 0x115f) || // Hangul Jamo
+    code === 0x2329 ||
+    code === 0x232a ||
+    (code >= 0x2e80 && code <= 0x3247 && code !== 0x303f) || // CJK Radicals
+    (code >= 0x3040 && code <= 0x309f) || // Hiragana
+    (code >= 0x30a0 && code <= 0x30ff) || // Katakana
+    (code >= 0x3250 && code <= 0x4dbf) || // CJK Extension A
+    (code >= 0x4e00 && code <= 0xa4c6) || // CJK Unified Ideographs .. Yi
+    (code >= 0xa960 && code <= 0xa97c) || // Hangul Jamo Extended-A
+    (code >= 0xac00 && code <= 0xd7af) || // Hangul Syllables
+    (code >= 0xf900 && code <= 0xfaff) || // CJK Compatibility Ideographs
+    (code >= 0xfe10 && code <= 0xfe19) || // Vertical Forms
+    (code >= 0xfe30 && code <= 0xfe6b) || // CJK Compatibility Forms
+    (code >= 0xff01 && code <= 0xff60) || // Fullwidth Forms
+    (code >= 0xffe0 && code <= 0xffe6) || // Fullwidth Symbols
+    (code >= 0x1f300 && code <= 0x1f9ff) || // Emojis & Pictographs
+    (code >= 0x1f600 && code <= 0x1f64f) || // Emoticons
+    (code >= 0x1f680 && code <= 0x1f6ff) || // Transport & Map
+    (code >= 0x2600 && code <= 0x27bf) || // Dingbats & Misc
+    (code >= 0x1fa70 && code <= 0x1faff) || // Symbols Extended-A
+    (code >= 0x20000 && code <= 0x3fffd) // CJK Extensions B/C/D
   );
 }
 
 /**
- * Slices a string to a maximum visual cell width.
+ * Slices a string to a maximum visual cell width without cutting surrogate pairs in half.
  */
 export function sliceToVisualWidth(str: string, maxWidth: number): string {
   let width = 0;
   let sliced = "";
-  for (let i = 0; i < str.length; i++) {
-    const code = str.charCodeAt(i);
-    const charWidth = isFullWidth(code) ? 2 : 1;
+
+  for (const char of str) {
+    const code = char.codePointAt(0) || 0;
+    const charWidth = (
+      code === 0x200d || code === 0xfe0f || code === 0xfe0e ||
+      (code >= 0x0300 && code <= 0x036f) || (code >= 0x200b && code <= 0x200f)
+    ) ? 0 : (isFullWidth(code) ? 2 : 1);
+
     if (width + charWidth > maxWidth) {
       break;
     }
     width += charWidth;
-    sliced += str.charAt(i);
+    sliced += char;
   }
+
   return sliced;
 }
 
@@ -412,14 +425,16 @@ export default function (pi: ExtensionAPI) {
             ctx.ui.setStatus(key, val);
           }
 
-          // 3. Command-Driven Disk I/O: Persist settings to disk asynchronously outside core paint loop
+          // 3. Command-Driven Disk I/O: Persist settings to disk atomically outside core paint loop
           try {
             if (fs.existsSync(settingsPath)) {
               const data = fs.readFileSync(settingsPath, "utf-8");
               const config = JSON.parse(data);
               if (!config.beautifier) config.beautifier = {};
               config.beautifier.style = styleKey;
-              fs.writeFileSync(settingsPath, JSON.stringify(config, null, 2), "utf-8");
+              const tempSettings = `${settingsPath}.tmp.${process.pid}.${Date.now()}`;
+              fs.writeFileSync(tempSettings, JSON.stringify(config, null, 2), "utf-8");
+              fs.renameSync(tempSettings, settingsPath);
             }
           } catch (e) {
             // Silently fail disk write to avoid crashing active user sessions
