@@ -11,6 +11,9 @@ const COMMON_NAMES: Record<string, string> = {
   "subagent-slash-text": "subagent",
   "pi-wechat-assistant": "wechat",
   "wechat-assistant": "wechat",
+  "pi-control-chrome": "chrome",
+  chrome: "chrome",
+  toolflow: "toolflow",
 };
 
 export interface CustomStyleConfig {
@@ -29,17 +32,17 @@ export interface CustomStyleConfig {
 
 const BUILTIN_PRESETS: Record<string, CustomStyleConfig> = {
   minimal: {
-    separator: " ❯ "
+    separator: " ❯ ",
   },
   glass: {
     prefix: "▕ ",
     suffix: " ▏",
-    separator: " "
+    separator: " ",
   },
   glow: {
     brackets: ["[", "]"],
-    inverse: true
-  }
+    inverse: true,
+  },
 };
 
 const VALID_STYLES = ["minimal", "glass", "glow", "custom", "off"] as const;
@@ -56,35 +59,75 @@ const ANSI_STRIP_REGEX =
 
 // Hoisted regex patterns to prevent instantiation and GC overhead in the render hot-path
 const STATUS_PATTERN =
-  /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋⌬]|[0-9]+\/[0-9]+|active|online|offline|running|paused|error|success|connected|disconnected/i;
+  /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋⌬★✦◇»«‹›⦗⦘]|[0-9]+\/[0-9]+|active|online|offline|running|paused|error|success|connected|disconnected|ready|idle|ok|done|failed|waiting|stopped|listening|cleanup|starting/i;
 const NAME_SUFFIX_PATTERN = /-(extension|plugin|assistant|adapter|slash-text|slash|text|widget)$/gi;
 const FRACTION_PATTERN = /(\d+\/\d+|\d+%\s*)/;
 const PARENTHESES_PATTERN = /\((\d+)\)/;
 const BRACKET_PATTERN = /\[(\d+)\]/;
 const NUMBER_PATTERN = /\b(\d+)\b/;
 
-// Load settings path
-const home = process.env.HOME || process.env.USERPROFILE || "";
-const settingsPath = path.join(home, ".pi/agent/settings.json");
-
 let currentStyle = "minimal";
 let customStyleConfig: CustomStyleConfig | undefined;
 
-try {
-  if (fs.existsSync(settingsPath)) {
-    const data = fs.readFileSync(settingsPath, "utf-8");
-    const config = JSON.parse(data);
-    if (config.beautifier && typeof config.beautifier.style === "string") {
-      const saved = config.beautifier.style;
-      currentStyle = (VALID_STYLES as readonly string[]).includes(saved) ? saved : "minimal";
+/**
+ * Resolves configuration hierarchically:
+ * Project-level `./.pi/settings.json` takes priority over global `~/.pi/agent/settings.json`
+ */
+export function loadConfig(cwd: string = process.cwd()): {
+  style: string;
+  custom?: CustomStyleConfig;
+  targetSettingsPath: string;
+} {
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  const globalPath = path.join(home, ".pi/agent/settings.json");
+  const localPath = path.join(cwd, ".pi/settings.json");
+
+  let resolvedStyle = "minimal";
+  let resolvedCustom: CustomStyleConfig | undefined;
+  let hasLocalConfig = false;
+
+  // 1. Read global settings
+  try {
+    if (fs.existsSync(globalPath)) {
+      const data = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
+      if (data.beautifier) {
+        if (typeof data.beautifier.style === "string") {
+          const s = data.beautifier.style;
+          if ((VALID_STYLES as readonly string[]).includes(s)) resolvedStyle = s;
+        }
+        if (data.beautifier.custom && typeof data.beautifier.custom === "object") {
+          resolvedCustom = data.beautifier.custom;
+        }
+      }
     }
-    if (config.beautifier?.custom && typeof config.beautifier.custom === "object") {
-      customStyleConfig = config.beautifier.custom;
+  } catch (_) {}
+
+  // 2. Project-level override (inherits and overrides global)
+  try {
+    if (fs.existsSync(localPath)) {
+      const data = JSON.parse(fs.readFileSync(localPath, "utf-8"));
+      if (data.beautifier) {
+        hasLocalConfig = true;
+        if (typeof data.beautifier.style === "string") {
+          const s = data.beautifier.style;
+          if ((VALID_STYLES as readonly string[]).includes(s)) resolvedStyle = s;
+        }
+        if (data.beautifier.custom && typeof data.beautifier.custom === "object") {
+          resolvedCustom = { ...(resolvedCustom || {}), ...data.beautifier.custom };
+        }
+      }
     }
-  }
-} catch (_e) {
-  // Graceful fallback to default in case of JSON parse or read errors
+  } catch (_) {}
+
+  currentStyle = resolvedStyle;
+  customStyleConfig = resolvedCustom;
+
+  // Target path for atomic write: local project if exists or in project directory, otherwise global
+  const targetSettingsPath = hasLocalConfig || fs.existsSync(localPath) ? localPath : globalPath;
+  return { style: resolvedStyle, custom: resolvedCustom, targetSettingsPath };
 }
+
+loadConfig();
 
 // Clean status text and map state and details
 export function beautifyStatus(
@@ -117,6 +160,9 @@ export function beautifyStatus(
         name = name.slice(lastSlash + 1);
       }
       name = name.replace(NAME_SUFFIX_PATTERN, "").toLowerCase();
+      if (COMMON_NAMES[name]) {
+        name = COMMON_NAMES[name];
+      }
     }
     const visualName = padToVisualWidth(sliceToVisualWidth(name, 10), 10);
 
@@ -147,7 +193,8 @@ export function beautifyStatus(
       valLower.includes("✗") ||
       valLower.includes("offline") ||
       valLower.includes("error") ||
-      valLower.includes("failed")
+      valLower.includes("failed") ||
+      valLower.includes("stopped")
     ) {
       state = "error";
     } else if (
@@ -157,7 +204,9 @@ export function beautifyStatus(
       valLower.includes("warning") ||
       valLower.includes("pause") ||
       valLower.includes("planning") ||
-      valLower.includes("plan")
+      valLower.includes("plan") ||
+      valLower.includes("waiting") ||
+      valLower.includes("cleanup")
     ) {
       state = "warning";
     } else if (
@@ -165,7 +214,11 @@ export function beautifyStatus(
       valLower.includes("✅") ||
       valLower.includes("✓") ||
       valLower.includes("online") ||
-      valLower.includes("success")
+      valLower.includes("success") ||
+      valLower.includes("ready") ||
+      valLower.includes("idle") ||
+      valLower.includes("ok") ||
+      valLower.includes("done")
     ) {
       state = "success";
     } else {
@@ -214,7 +267,7 @@ export function beautifyStatus(
     }
 
     const styledSep =
-      hasThemeFg && (sep.includes("│") || sep.includes("⁝") || sep.includes("❯"))
+      hasThemeFg && (sep.includes("│") || sep.includes("⁝") || sep.includes("❯") || sep.includes("»"))
         ? theme.fg("dim", sep)
         : sep;
 
@@ -327,13 +380,111 @@ export function padToVisualWidth(str: string, targetWidth: number, padChar = " "
   return str + padChar.repeat(targetWidth - currentWidth);
 }
 
+/**
+ * Full-Footer Renderer (Hooked via ctx.ui.setFooter)
+ * Formats working folder, Git branch, token metrics, and active model on Line 1,
+ * and formats all extension statuses on Line 2.
+ */
+export function renderBeautifiedFooter(
+  width: number,
+  _tui: any,
+  theme: any,
+  footerData: any,
+  ctx: any,
+  style: string,
+  customCfg?: CustomStyleConfig
+): string[] {
+  const preset =
+    style === "custom"
+      ? (customCfg || customStyleConfig || {})
+      : (BUILTIN_PRESETS[style] || BUILTIN_PRESETS.minimal);
+
+  const hasThemeFg = theme && typeof theme.fg === "function";
+  const sep = preset.separator || (preset.brackets ? " " : " ❯ ");
+  const styledSep =
+    hasThemeFg && (sep.includes("│") || sep.includes("⁝") || sep.includes("❯") || sep.includes("»"))
+      ? theme.fg("dim", sep)
+      : sep;
+
+  // 1. Folder & Git branch
+  const branch = typeof footerData?.getGitBranch === "function" ? footerData.getGitBranch() : "";
+  const folder = path.basename(ctx?.cwd || process.cwd()) || "workspace";
+  const branchPart = branch ? `${folder} (${branch})` : folder;
+  const styledBranch = hasThemeFg ? theme.fg("dim", branchPart) : branchPart;
+
+  // 2. Model
+  const modelName = ctx?.model?.name || ctx?.model?.id || "";
+  const styledModel = modelName ? (hasThemeFg ? theme.fg("muted", modelName) : modelName) : "";
+
+  // 3. Token metrics
+  let input = 0, output = 0;
+  if (ctx?.sessionManager?.getBranch) {
+    try {
+      for (const e of ctx.sessionManager.getBranch()) {
+        if (e.type === "message" && e.message?.role === "assistant" && e.message?.usage) {
+          const u = e.message.usage;
+          input += u.input || 0;
+          output += u.output || 0;
+        }
+      }
+    } catch (_) {}
+  }
+  const fmt = (n: number) => (n < 1000 ? `${n}` : `${(n / 1000).toFixed(1)}k`);
+  const tokenStr = input > 0 || output > 0 ? `↑${fmt(input)} ↓${fmt(output)}` : "";
+  const styledTokens = tokenStr ? (hasThemeFg ? theme.fg("dim", tokenStr) : tokenStr) : "";
+
+  // Left & right parts of Line 1
+  const leftText = styledBranch;
+  const rightParts = [styledTokens, styledModel].filter(Boolean);
+  const rightText = rightParts.join(styledSep);
+
+  const leftVis = getStringWidth(leftText);
+  const rightVis = getStringWidth(rightText);
+  const padLen = Math.max(1, width - leftVis - rightVis);
+  const line1 = leftText + " ".repeat(padLen) + rightText;
+
+  const lines = [line1];
+
+  // Line 2: Extension status badges
+  const extStatuses: Array<[string, string]> = [];
+  if (footerData && typeof footerData.getExtensionStatuses === "function") {
+    try {
+      const map = footerData.getExtensionStatuses();
+      if (map && typeof map.entries === "function") {
+        for (const [k, v] of map.entries()) {
+          if (v) extStatuses.push([k, v]);
+        }
+      }
+    } catch (_) {}
+  }
+  if (extStatuses.length === 0) {
+    for (const [k, v] of originalStatuses.entries()) {
+      if (v) extStatuses.push([k, v]);
+    }
+  }
+
+  if (extStatuses.length > 0) {
+    const badges = extStatuses
+      .map(([k, v]) => beautifyStatus(k, v, theme, style, customCfg))
+      .filter(Boolean) as string[];
+    if (badges.length > 0) {
+      lines.push(badges.join("  "));
+    }
+  }
+
+  return lines;
+}
+
 export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     if (!ctx.hasUI || !ctx.ui) return;
 
+    loadConfig(ctx.cwd || process.cwd());
+
     originalStatuses.clear();
     lastRenderedStatus.clear();
 
+    // 1. Hook setStatus for granular extension badge formatting
     const originalSetStatus = ctx.ui.setStatus;
     if (originalSetStatus && !(originalSetStatus as any).__beautifierHooked) {
       const wrapped = function (key: string, value: string | undefined) {
@@ -351,6 +502,25 @@ export default function (pi: ExtensionAPI) {
       };
       (wrapped as any).__beautifierHooked = true;
       ctx.ui.setStatus = wrapped;
+    }
+
+    // 2. Hook setFooter for full-footer beautification
+    if (typeof (ctx.ui as any).setFooter === "function") {
+      (ctx.ui as any).setFooter((tui: any, theme: any, footerData: any) => {
+        const unsub =
+          typeof footerData?.onBranchChange === "function"
+            ? footerData.onBranchChange(() => tui.requestRender())
+            : undefined;
+
+        return {
+          dispose: unsub,
+          invalidate() {},
+          render(width: number): string[] {
+            if (currentStyle === "off") return [];
+            return renderBeautifiedFooter(width, tui, theme, footerData, ctx, currentStyle, customStyleConfig);
+          },
+        };
+      });
     }
   });
 
@@ -380,8 +550,20 @@ export default function (pi: ExtensionAPI) {
         const promptRecipe = [
           "You are acting as my Pi TUI Status Bar designer for `pi-tui-status-beautifier`.",
           "1. In my primary language, call `ask_user_question` with ASCII visual preview mockups (e.g. Cyber Powerline ‹●›, Nordic Minimalist │ ◈, Capsule Pill [●], Tokyo Night » ✦) to consult my visual taste.",
-          "2. Once I select or describe my aesthetic, save the configuration directly into `settings.json` under `beautifier.style = 'custom'` and `beautifier.custom = { separator, brackets, glyphs, prefix, suffix }`.",
-          "Do NOT edit any extension source code files."
+          "2. Once I select or describe my aesthetic, save the configuration directly into `./.pi/settings.json` (or `~/.pi/agent/settings.json`) under `beautifier`:",
+          "   {",
+          '     "beautifier": {',
+          '       "style": "custom",',
+          '       "custom": {',
+          '         "separator": " » ",',
+          '         "brackets": ["«", "»"],',
+          '         "prefix": "✦ ",',
+          '         "suffix": "",',
+          '         "glyphs": { "success": "✦", "warning": "◇", "error": "✖", "accent": "✧" }',
+          "       }",
+          "     }",
+          "   }",
+          "Do NOT crawl filesystem or edit extension source code files."
         ].join("\n");
 
         if (typeof (ctx.ui as any).setEditorText === "function") {
@@ -398,18 +580,17 @@ export default function (pi: ExtensionAPI) {
         lastRenderedStatus.clear();
         ctx.ui.notify(`TUI status style changed to: ${styleKey}`, "info");
 
+        const { targetSettingsPath } = loadConfig(ctx.cwd || process.cwd());
+
         try {
-          if (fs.existsSync(settingsPath)) {
-            const data = fs.readFileSync(settingsPath, "utf-8");
+          if (fs.existsSync(targetSettingsPath)) {
+            const data = fs.readFileSync(targetSettingsPath, "utf-8");
             const config = JSON.parse(data);
-            if (config.beautifier?.custom && typeof config.beautifier.custom === "object") {
-              customStyleConfig = config.beautifier.custom;
-            }
             if (!config.beautifier) config.beautifier = {};
             config.beautifier.style = styleKey;
-            const tempSettings = `${settingsPath}.tmp.${process.pid}.${Date.now()}`;
+            const tempSettings = `${targetSettingsPath}.tmp.${process.pid}.${Date.now()}`;
             fs.writeFileSync(tempSettings, JSON.stringify(config, null, 2), "utf-8");
-            fs.renameSync(tempSettings, settingsPath);
+            fs.renameSync(tempSettings, targetSettingsPath);
           }
         } catch (_e) {
           // Silently ignore disk write errors

@@ -3,7 +3,9 @@ import {
   beautifyStatus,
   getStringWidth,
   sliceToVisualWidth,
-  padToVisualWidth
+  padToVisualWidth,
+  renderBeautifiedFooter,
+  loadConfig
 } from "./tui-status-beautifier";
 
 describe("TUI Status Beautifier Tests", () => {
@@ -74,6 +76,26 @@ describe("TUI Status Beautifier Tests", () => {
       expect(output).toContain("›");
     });
 
+    it("should beautify chrome: ready with custom tokyo night style", () => {
+      const tokyoNightCfg = {
+        separator: " » ",
+        brackets: ["«", "»"] as [string, string],
+        glyphs: {
+          success: "✦",
+          warning: "◇",
+          error: "✖",
+          accent: "✧"
+        },
+        prefix: "✦ ",
+        suffix: ""
+      };
+      const output = beautifyStatus("pi-control-chrome", "chrome: ready", mockTheme, "custom", tokyoNightCfg);
+      expect(output).toContain("chrome");
+      expect(output).toContain("✦");
+      expect(output).toContain("«");
+      expect(output).toContain("»");
+    });
+
     it("should return raw output when style is off", () => {
       const output = beautifyStatus("test", "active (5)", mockTheme, "off");
       expect(output).toBe("active (5)");
@@ -116,6 +138,59 @@ describe("TUI Status Beautifier Tests", () => {
 
       expect(getStringWidth(namePart1)).toBe(10);
       expect(getStringWidth(namePart2)).toBe(10);
+    });
+  });
+
+  describe("Full-Footer Beautification (renderBeautifiedFooter)", () => {
+    it("renders both top status line and active extension badges", () => {
+      const mockFooterData = {
+        getGitBranch: () => "main",
+        getExtensionStatuses: () => new Map([["pi-control-chrome", "chrome: ready"]])
+      };
+      const mockCtx = {
+        cwd: "D:/Workspace/test",
+        model: { id: "gemini-3.8-flash-high" },
+        sessionManager: {
+          getBranch: () => [
+            {
+              type: "message",
+              message: { role: "assistant", usage: { input: 12000, output: 2200 } }
+            }
+          ]
+        }
+      };
+
+      const lines = renderBeautifiedFooter(80, null, mockTheme, mockFooterData, mockCtx, "minimal");
+      expect(lines.length).toBe(2);
+      expect(lines[0]).toContain("test (main)");
+      expect(lines[0]).toContain("gemini-3.8-flash-high");
+      expect(lines[1]).toContain("chrome");
+      expect(lines[1]).toContain("●");
+    });
+
+    it("renders custom Tokyo Night layout in full-footer mode", () => {
+      const mockFooterData = {
+        getGitBranch: () => "feature",
+        getExtensionStatuses: () => new Map([["pi-control-chrome", "chrome: ready"]])
+      };
+      const mockCtx = {
+        cwd: "D:/Workspace/test",
+        model: { id: "claude-3.5" },
+        sessionManager: { getBranch: () => [] }
+      };
+      const tokyoCfg = {
+        separator: " » ",
+        brackets: ["«", "»"] as [string, string],
+        glyphs: { success: "✦" },
+        prefix: "✦ "
+      };
+
+      const lines = renderBeautifiedFooter(80, null, mockTheme, mockFooterData, mockCtx, "custom", tokyoCfg);
+      expect(lines[0]).toContain("test (feature)");
+      expect(lines[0]).toContain("claude-3.5");
+      const cleanLine2 = lines[1].replace(/\[\/?\w+\]/g, "");
+      expect(cleanLine2).toContain("✦ chrome");
+      expect(cleanLine2).toContain("«✦»");
     });
   });
 });
