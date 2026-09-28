@@ -43,16 +43,31 @@ describe("TUI Status Beautifier Tests", () => {
   });
 
   describe("Layout Preset Rendering", () => {
-    it("should render minimal style", () => {
-      const output = beautifyStatus("test", "active", mockTheme, "minimal");
+    it("should render stream (default) style with natural compact width", () => {
+      const output = beautifyStatus("test", "active", mockTheme, "stream");
+      expect(output).toContain("test");
       expect(output).toContain("❯");
       expect(output).toContain("●");
+      // Natural width: no 6 trailing spaces
+      expect(output).not.toContain("test      ");
     });
 
-    it("should render glass style", () => {
-      const output = beautifyStatus("test", "active", mockTheme, "glass");
-      expect(output).toContain("▕");
-      expect(output).toContain("▏");
+    it("should render powerline style with angled brackets and diamond glyph", () => {
+      const output = beautifyStatus("chrome", "ready", mockTheme, "powerline");
+      expect(output).toContain("chrome");
+      expect(output).toContain("‹");
+      expect(output).toContain("◆");
+      expect(output).toContain("ready");
+      expect(output).toContain("›");
+    });
+
+    it("should render matrix style with dot-matrix brackets and star glyph", () => {
+      const output = beautifyStatus("chrome", "ready", mockTheme, "matrix");
+      expect(output).toContain("chrome");
+      expect(output).toContain("⦗");
+      expect(output).toContain("✦");
+      expect(output).toContain("ready");
+      expect(output).toContain("⦘");
     });
 
     it("should render glow style", () => {
@@ -96,9 +111,11 @@ describe("TUI Status Beautifier Tests", () => {
       expect(output).toContain("»");
     });
 
-    it("should return raw output when style is off", () => {
-      const output = beautifyStatus("test", "active (5)", mockTheme, "off");
-      expect(output).toBe("active (5)");
+    it("should return raw output when style is off or default", () => {
+      expect(beautifyStatus("test", "active (5)", mockTheme, "off")).toBe("active (5)");
+      expect(beautifyStatus("test", "active (5)", mockTheme, "default")).toBe("active (5)");
+      expect(beautifyStatus("test", "active (5)", mockTheme, "none")).toBe("active (5)");
+      expect(beautifyStatus("test", "active (5)", mockTheme, "raw")).toBe("active (5)");
     });
   });
 

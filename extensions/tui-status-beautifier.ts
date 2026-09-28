@@ -22,6 +22,7 @@ export interface CustomStyleConfig {
   separator?: string;
   brackets?: [string, string];
   inverse?: boolean;
+  padName?: boolean;
   glyphs?: {
     success?: string;
     warning?: string;
@@ -31,21 +32,52 @@ export interface CustomStyleConfig {
 }
 
 const BUILTIN_PRESETS: Record<string, CustomStyleConfig> = {
-  minimal: {
+  stream: {
     separator: " ❯ ",
   },
-  glass: {
-    prefix: "▕ ",
-    suffix: " ▏",
+  powerline: {
+    brackets: ["‹", "›"],
     separator: " ",
+    glyphs: {
+      success: "◆",
+      warning: "◌",
+      error: "▲",
+      accent: "◈",
+    },
+  },
+  matrix: {
+    brackets: ["⦗", "⦘"],
+    separator: " ",
+    glyphs: {
+      success: "✦",
+      warning: "◍",
+      error: "✖",
+      accent: "✧",
+    },
   },
   glow: {
     brackets: ["[", "]"],
     inverse: true,
   },
+  // Backward-compatible aliases
+  minimal: {
+    separator: " ❯ ",
+    padName: true,
+  },
+  glass: {
+    brackets: ["‹", "›"],
+    separator: " ",
+    glyphs: {
+      success: "◆",
+      warning: "◌",
+      error: "▲",
+      accent: "◈",
+    },
+  },
 };
 
-const VALID_STYLES = ["minimal", "glass", "glow", "custom", "off"] as const;
+const VALID_STYLES = ["stream", "powerline", "matrix", "glow", "minimal", "glass", "custom", "off"] as const;
+const OFF_STYLES = new Set(["off", "default", "none", "raw", "vanilla", "disable", "disabled"]);
 
 // Store original statuses to allow dynamic redrawing on configuration changes.
 const originalStatuses = new Map<string, string | undefined>();
@@ -92,8 +124,12 @@ export function loadConfig(cwd: string = process.cwd()): {
       const data = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
       if (data.beautifier) {
         if (typeof data.beautifier.style === "string") {
-          const s = data.beautifier.style;
-          if ((VALID_STYLES as readonly string[]).includes(s)) resolvedStyle = s;
+          const s = data.beautifier.style.toLowerCase().trim();
+          if (OFF_STYLES.has(s)) {
+            resolvedStyle = "off";
+          } else if ((VALID_STYLES as readonly string[]).includes(s)) {
+            resolvedStyle = s;
+          }
         }
         if (data.beautifier.custom && typeof data.beautifier.custom === "object") {
           resolvedCustom = data.beautifier.custom;
@@ -109,8 +145,12 @@ export function loadConfig(cwd: string = process.cwd()): {
       if (data.beautifier) {
         hasLocalConfig = true;
         if (typeof data.beautifier.style === "string") {
-          const s = data.beautifier.style;
-          if ((VALID_STYLES as readonly string[]).includes(s)) resolvedStyle = s;
+          const s = data.beautifier.style.toLowerCase().trim();
+          if (OFF_STYLES.has(s)) {
+            resolvedStyle = "off";
+          } else if ((VALID_STYLES as readonly string[]).includes(s)) {
+            resolvedStyle = s;
+          }
         }
         if (data.beautifier.custom && typeof data.beautifier.custom === "object") {
           resolvedCustom = { ...(resolvedCustom || {}), ...data.beautifier.custom };
@@ -138,7 +178,7 @@ export function beautifyStatus(
   customCfg?: CustomStyleConfig
 ): string | undefined {
   if (originalVal === undefined) return undefined;
-  if (style === "off") return originalVal;
+  if (style === "off" || OFF_STYLES.has((style || "").toLowerCase().trim())) return originalVal;
 
   try {
     const hasAnsi = originalVal.includes("\u001B") || originalVal.includes("\u009B");
@@ -150,7 +190,7 @@ export function beautifyStatus(
       return originalVal;
     }
 
-    // 1. Get display name
+    // 1. Get display name (compact natural width by default to save precious terminal columns)
     let name = key.toLowerCase();
     if (COMMON_NAMES[name]) {
       name = COMMON_NAMES[name];
@@ -164,7 +204,14 @@ export function beautifyStatus(
         name = COMMON_NAMES[name];
       }
     }
-    const visualName = padToVisualWidth(sliceToVisualWidth(name, 10), 10);
+    const preset =
+      style === "custom"
+        ? (customCfg || customStyleConfig || {})
+        : (BUILTIN_PRESETS[style] || BUILTIN_PRESETS.stream);
+
+    const visualName = preset.padName === true
+      ? padToVisualWidth(sliceToVisualWidth(name, 10), 10)
+      : name;
 
     // 2. Extract metrics/progress details safely (e.g. (2) or fraction 2/5 or count)
     let details: string | undefined;
@@ -234,11 +281,6 @@ export function beautifyStatus(
     }
 
     // 4. Determine state glyph & indicator
-    const preset =
-      style === "custom"
-        ? (customCfg || customStyleConfig || {})
-        : (BUILTIN_PRESETS[style] || BUILTIN_PRESETS.minimal);
-
     const glyphMap = preset.glyphs || {};
     let glyph =
       glyphMap[state] ||
@@ -522,11 +564,12 @@ export default function (pi: ExtensionAPI) {
       }
 
       const styleOptions = [
-        "custom  - [AI Prompt Recipe] Let your agent generate or tailor your own style",
-        "minimal - Clean chevron indicator (e.g. name ❯ ●)",
-        "glass   - Framed capsule badge (e.g. ▕ name ● ▏)",
-        "glow    - High-contrast inverse pill (e.g. name [ ● ])",
-        "off     - Pass through raw status output",
+        "stream    - Clean chevron stream (e.g. name ❯ ● ready)",
+        "powerline - Angled brackets & diamonds (e.g. name ‹◆ ready›)",
+        "matrix    - Dot-matrix brackets & stars (e.g. name ⦗✦ ready⦘)",
+        "glow      - High-contrast inverse pill (e.g. name [ ● ready ])",
+        "custom    - [AI Prompt Recipe] Let your agent tailor your bespoke style",
+        "off       - Revert to native Pi status bar & clean settings",
       ];
 
       const choice = await ctx.ui.select(`Choose status style (Current: ${currentStyle}):`, styleOptions);
@@ -535,24 +578,61 @@ export default function (pi: ExtensionAPI) {
 
       const styleKey = choice.split(" ")[0].trim();
 
+      if (styleKey === "off") {
+        currentStyle = "off";
+        customStyleConfig = undefined;
+        lastRenderedStatus.clear();
+
+        // Restore all raw original statuses immediately
+        for (const [key, val] of originalStatuses.entries()) {
+          ctx.ui.setStatus(key, val);
+        }
+
+        // Zero-trace physical cleanup: completely prune the `beautifier` key from settings.json!
+        const { targetSettingsPath } = loadConfig(ctx.cwd || process.cwd());
+        try {
+          if (fs.existsSync(targetSettingsPath)) {
+            const data = fs.readFileSync(targetSettingsPath, "utf-8");
+            const config = JSON.parse(data);
+            if (config.beautifier) {
+              delete config.beautifier;
+              const tempSettings = `${targetSettingsPath}.tmp.${process.pid}.${Date.now()}`;
+              fs.writeFileSync(tempSettings, JSON.stringify(config, null, 2), "utf-8");
+              fs.renameSync(tempSettings, targetSettingsPath);
+            }
+          }
+        } catch (_e) {
+          // Silently ignore disk write errors
+        }
+
+        ctx.ui.notify("Reverted to native Pi status bar. Cleaned up settings.json.", "info");
+        return;
+      }
+
       if (styleKey === "custom") {
         const promptRecipe = [
           "You are acting as my Pi TUI Status Bar designer for `pi-tui-status-beautifier`.",
-          "1. In my primary language, call `ask_user_question` with ASCII visual preview mockups (e.g. Cyber Powerline ‹●›, Nordic Minimalist │ ◈, Capsule Pill [●], Tokyo Night » ✦) to consult my visual taste.",
-          "2. Once I select or describe my aesthetic, save the configuration directly into `./.pi/settings.json` (or `~/.pi/agent/settings.json`) under `beautifier`:",
+          "1. In my primary language, call `ask_user_question` with ASCII visual preview mockups showing ONLY realistic extension statuses (e.g. `chrome`, `toolflow`, `plan`):",
+          "   - Powerline:  chrome ‹◆ ready›  |  toolflow ‹◈ 2/5›",
+          "   - Matrix:     chrome ⦗✦ ready⦘  |  toolflow ⦗◍ 2/5⦘",
+          "   - Stream:     chrome ❯ ● ready  |  toolflow ❯ ◐ 2/5",
+          "   - Glow:       chrome [ ● ready ]  |  toolflow [ ◐ 2/5 ]",
+          "   (Do NOT include git branch or model name in mockups).",
+          "2. If I describe or pick a style, write the configuration into `./.pi/settings.json` (or `~/.pi/agent/settings.json`) under `beautifier`:",
           "   {",
           '     "beautifier": {',
           '       "style": "custom",',
           '       "custom": {',
           '         "separator": " » ",',
           '         "brackets": ["«", "»"],',
-          '         "prefix": "✦ ",',
+          '         "prefix": "",',
           '         "suffix": "",',
           '         "glyphs": { "success": "✦", "warning": "◇", "error": "✖", "accent": "✧" }',
           "       }",
           "     }",
           "   }",
-          "Do NOT crawl filesystem or edit extension source code files."
+          "3. If I say revert, restore, default, off, or cancel, DELETE the `beautifier` key from `settings.json` and exit quietly without asking more questions.",
+          "4. Do NOT search filesystem or edit extension source files."
         ].join("\n");
 
         if (typeof (ctx.ui as any).setEditorText === "function") {
