@@ -59,6 +59,21 @@ describe("TUI Status Beautifier Tests", () => {
       expect(output).toContain("●");
     });
 
+    it("should render custom style using configuration object", () => {
+      const customCfg = {
+        separator: " │ ",
+        brackets: ["‹", "›"] as [string, string],
+        glyphs: { success: "◆", error: "▲" }
+      };
+      const output = beautifyStatus("test", "active (2/5)", mockTheme, "custom", customCfg);
+      expect(output).toContain("test");
+      expect(output).toContain("│");
+      expect(output).toContain("‹");
+      expect(output).toContain("◆");
+      expect(output).toContain("2/5");
+      expect(output).toContain("›");
+    });
+
     it("should return raw output when style is off", () => {
       const output = beautifyStatus("test", "active (5)", mockTheme, "off");
       expect(output).toBe("active (5)");

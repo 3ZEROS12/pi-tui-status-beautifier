@@ -13,7 +13,36 @@ const COMMON_NAMES: Record<string, string> = {
   "wechat-assistant": "wechat",
 };
 
-const VALID_STYLES = ["minimal", "glass", "glow", "off"] as const;
+export interface CustomStyleConfig {
+  prefix?: string;
+  suffix?: string;
+  separator?: string;
+  brackets?: [string, string];
+  inverse?: boolean;
+  glyphs?: {
+    success?: string;
+    warning?: string;
+    error?: string;
+    accent?: string;
+  };
+}
+
+const BUILTIN_PRESETS: Record<string, CustomStyleConfig> = {
+  minimal: {
+    separator: " ❯ "
+  },
+  glass: {
+    prefix: "▕ ",
+    suffix: " ▏",
+    separator: " "
+  },
+  glow: {
+    brackets: ["[", "]"],
+    inverse: true
+  }
+};
+
+const VALID_STYLES = ["minimal", "glass", "glow", "custom", "off"] as const;
 
 // Store original statuses to allow dynamic redrawing on configuration changes.
 const originalStatuses = new Map<string, string | undefined>();
@@ -39,6 +68,7 @@ const home = process.env.HOME || process.env.USERPROFILE || "";
 const settingsPath = path.join(home, ".pi/agent/settings.json");
 
 let currentStyle = "minimal";
+let customStyleConfig: CustomStyleConfig | undefined;
 
 try {
   if (fs.existsSync(settingsPath)) {
@@ -47,6 +77,9 @@ try {
     if (config.beautifier && typeof config.beautifier.style === "string") {
       const saved = config.beautifier.style;
       currentStyle = (VALID_STYLES as readonly string[]).includes(saved) ? saved : "minimal";
+    }
+    if (config.beautifier?.custom && typeof config.beautifier.custom === "object") {
+      customStyleConfig = config.beautifier.custom;
     }
   }
 } catch (_e) {
@@ -58,7 +91,8 @@ export function beautifyStatus(
   key: string,
   originalVal: string | undefined,
   theme: any,
-  style: string
+  style: string,
+  customCfg?: CustomStyleConfig
 ): string | undefined {
   if (originalVal === undefined) return undefined;
   if (style === "off") return originalVal;
@@ -138,38 +172,53 @@ export function beautifyStatus(
       state = name === "plan" ? "accent" : "success";
     }
 
-    // 4. Map state to target glyph shapes
-    let char = "●";
-    if (state === "warning") char = "◌";
-    else if (state === "error") char = "▲";
+    // 4. Determine state glyph & indicator
+    const preset =
+      style === "custom"
+        ? (customCfg || customStyleConfig || {})
+        : (BUILTIN_PRESETS[style] || BUILTIN_PRESETS.minimal);
+
+    const glyphMap = preset.glyphs || {};
+    let glyph =
+      glyphMap[state] ||
+      (state === "warning" ? "◌" : state === "error" ? "▲" : state === "accent" ? "◆" : "●");
 
     const hasThemeFg = theme && typeof theme.fg === "function";
-    const coloredIndicator = hasThemeFg ? theme.fg(state, char) : char;
+    const coloredGlyph = hasThemeFg ? theme.fg(state, glyph) : glyph;
+    const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
 
-    // 5. Render layout presets (3 curated baseline layouts: minimal, glass, glow)
-    switch (style) {
-      case "glass": {
-        const prefix = hasThemeFg ? theme.fg("dim", "▕ ") : "▕ ";
-        const suffix = hasThemeFg ? theme.fg("dim", " ▏") : " ▏";
-        const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
-        const detailStr = details ? ` (${details})` : "";
-        return `${prefix}${dimmedName} ${coloredIndicator}${detailStr}${suffix}`;
-      }
-      case "glow": {
-        const label = ` ${char}${details ? ` ${details}` : ""} `;
-        const hasInverse = theme && typeof theme.inverse === "function";
-        const coloredBadge = hasInverse && hasThemeFg ? theme.inverse(theme.fg(state, label)) : `[${label}]`;
-        const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
-        return `${dimmedName} ${coloredBadge}`;
-      }
-      case "minimal":
-      default: {
-        const separator = hasThemeFg ? theme.fg("dim", " ❯ ") : " ❯ ";
-        const dimmedName = hasThemeFg ? theme.fg("muted", visualName) : visualName;
-        const detailStr = details ? ` (${details})` : "";
-        return `${dimmedName}${separator}${coloredIndicator}${detailStr}`;
-      }
+    const openBracket = preset.brackets?.[0] ?? "";
+    const closeBracket = preset.brackets?.[1] ?? "";
+    const prefix = preset.prefix ?? "";
+    const suffix = preset.suffix ?? "";
+    const sep = preset.separator ?? (preset.brackets ? " " : " ❯ ");
+
+    // Inverse pill badge (glow preset)
+    if (preset.inverse && theme && typeof theme.inverse === "function") {
+      const pillContent = ` ${glyph}${details ? ` ${details}` : ""} `;
+      const coloredBadge = hasThemeFg ? theme.inverse(theme.fg(state, pillContent)) : `[${pillContent}]`;
+      return `${prefix}${dimmedName} ${coloredBadge}${suffix}`;
     }
+
+    let badge = coloredGlyph;
+    if (details) {
+      badge = `${coloredGlyph} ${details}`;
+    }
+    if (openBracket && closeBracket) {
+      const styledOpen = hasThemeFg ? theme.fg("dim", openBracket) : openBracket;
+      const styledClose = hasThemeFg ? theme.fg("dim", closeBracket) : closeBracket;
+      badge = `${styledOpen}${badge}${styledClose}`;
+    } else if (details && !preset.brackets) {
+      const detailStr = hasThemeFg ? theme.fg("dim", ` (${details})`) : ` (${details})`;
+      badge = `${coloredGlyph}${detailStr}`;
+    }
+
+    const styledSep =
+      hasThemeFg && (sep.includes("│") || sep.includes("⁝") || sep.includes("❯"))
+        ? theme.fg("dim", sep)
+        : sep;
+
+    return `${prefix}${dimmedName}${styledSep}${badge}${suffix}`;
   } catch (_error) {
     return originalVal;
   }
@@ -329,15 +378,15 @@ export default function (pi: ExtensionAPI) {
 
       if (styleKey === "custom") {
         const promptRecipe = [
-          "You are acting as my Pi TUI Status Bar designer.",
-          "1. Detect my primary language from our recent conversation history or environment locale.",
-          "2. In that EXACT primary language, proactively ask me what visual aesthetic I want for my status bar, and propose 3 distinct creative ideas (e.g. Cyberpunk Dot-Matrix, Warm Minimalist, High-Contrast Pill).",
-          "3. Wait for my preference or feedback, then inspect `tui-status-beautifier.ts` and apply the custom layout for me."
+          "You are acting as my Pi TUI Status Bar designer for `pi-tui-status-beautifier`.",
+          "1. In my primary language, call `ask_user_question` with ASCII visual preview mockups (e.g. Cyber Powerline ‹●›, Nordic Minimalist │ ◈, Capsule Pill [●], Tokyo Night » ✦) to consult my visual taste.",
+          "2. Once I select or describe my aesthetic, save the configuration directly into `settings.json` under `beautifier.style = 'custom'` and `beautifier.custom = { separator, brackets, glyphs, prefix, suffix }`.",
+          "Do NOT edit any extension source code files."
         ].join("\n");
 
         if (typeof (ctx.ui as any).setEditorText === "function") {
           (ctx.ui as any).setEditorText(promptRecipe);
-          ctx.ui.notify("Press Enter to let your agent consult your style preference in your native language!", "info");
+          ctx.ui.notify("Press Enter to let your agent consult your style preference with visual previews!", "info");
         } else {
           ctx.ui.notify(promptRecipe, "info");
         }
@@ -349,14 +398,13 @@ export default function (pi: ExtensionAPI) {
         lastRenderedStatus.clear();
         ctx.ui.notify(`TUI status style changed to: ${styleKey}`, "info");
 
-        for (const [key, val] of originalStatuses.entries()) {
-          ctx.ui.setStatus(key, val);
-        }
-
         try {
           if (fs.existsSync(settingsPath)) {
             const data = fs.readFileSync(settingsPath, "utf-8");
             const config = JSON.parse(data);
+            if (config.beautifier?.custom && typeof config.beautifier.custom === "object") {
+              customStyleConfig = config.beautifier.custom;
+            }
             if (!config.beautifier) config.beautifier = {};
             config.beautifier.style = styleKey;
             const tempSettings = `${settingsPath}.tmp.${process.pid}.${Date.now()}`;
@@ -365,6 +413,10 @@ export default function (pi: ExtensionAPI) {
           }
         } catch (_e) {
           // Silently ignore disk write errors
+        }
+
+        for (const [key, val] of originalStatuses.entries()) {
+          ctx.ui.setStatus(key, val);
         }
       }
     },
