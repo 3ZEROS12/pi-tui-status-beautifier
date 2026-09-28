@@ -629,74 +629,42 @@ export default function (pi: ExtensionAPI) {
 
   // Dynamic status bar style controller registry
   pi.registerCommand("beautify", {
-    description: "Choose TUI status bar beautification style or generate a custom style with AI",
+    description: "Choose TUI status bar style or customize with AI",
     handler: async (_args, ctx) => {
       if (!ctx.hasUI || !ctx.ui) {
         return;
       }
 
+      // Stage 1: Select Style / Theme
       const styleOptions = [
         "stream    - Clean chevron stream (e.g. name ❯ ● ready)",
         "powerline - Angled brackets & diamonds (e.g. name ‹◆ ready›)",
         "matrix    - Dot-matrix brackets & stars (e.g. name ⦗✦ ready⦘)",
         "glow      - High-contrast inverse pill (e.g. name [ ● ready ])",
-        "custom    - [AI Prompt Recipe] Let your agent tailor your bespoke style",
-        `footer    - Toggle Full-Footer beautification (Git/Model/Tokens) [Currently: ${fullFooterEnabled ? "ON" : "OFF"}]`,
+        "custom    - Describe your custom aesthetic to AI",
         "off       - Revert to native Pi status bar & clean settings",
       ];
 
-      const choice = await ctx.ui.select(`Choose status style (Current: ${currentStyle}):`, styleOptions);
+      const choice = await ctx.ui.select(`Choose status bar style (Current: ${currentStyle}):`, styleOptions);
 
       if (!choice) return;
 
       const styleKey = choice.split(" ")[0].trim();
 
-      if (styleKey === "footer") {
-        fullFooterEnabled = !fullFooterEnabled;
-        const { targetSettingsPath } = loadConfig(ctx.cwd || process.cwd());
-        try {
-          if (fs.existsSync(targetSettingsPath)) {
-            const data = fs.readFileSync(targetSettingsPath, "utf-8");
-            const config = JSON.parse(data);
-            if (!config.beautifier) config.beautifier = {};
-            config.beautifier.fullFooter = fullFooterEnabled;
-            const tempSettings = `${targetSettingsPath}.tmp.${process.pid}.${Date.now()}`;
-            fs.writeFileSync(tempSettings, JSON.stringify(config, null, 2), "utf-8");
-            fs.renameSync(tempSettings, targetSettingsPath);
-          }
-        } catch (_) {}
-
-        if (fullFooterEnabled && currentStyle !== "off" && typeof (ctx.ui as any).setFooter === "function") {
-          (ctx.ui as any).setFooter((tui: any, theme: any, footerData: any) => {
-            const unsub = typeof footerData?.onBranchChange === "function" ? footerData.onBranchChange(() => tui.requestRender()) : undefined;
-            return {
-              dispose: unsub,
-              invalidate() {},
-              render(width: number): string[] {
-                if (currentStyle === "off" || !fullFooterEnabled) return [];
-                return renderBeautifiedFooter(width, tui, theme, footerData, ctx, currentStyle, customStyleConfig);
-              }
-            };
-          });
-        } else if (typeof (ctx.ui as any).setFooter === "function") {
-          (ctx.ui as any).setFooter(undefined);
-        }
-
-        ctx.ui.notify(`Full-footer beautification is now ${fullFooterEnabled ? "ENABLED" : "DISABLED (Native Pi Footer)"}`, "info");
-        return;
-      }
-
+      // Zero-trace physical cleanup & revert
       if (styleKey === "off") {
         currentStyle = "off";
+        fullFooterEnabled = false;
         customStyleConfig = undefined;
         lastRenderedStatus.clear();
 
-        // Restore all raw original statuses immediately
         for (const [key, val] of originalStatuses.entries()) {
           ctx.ui.setStatus(key, val);
         }
+        if (typeof (ctx.ui as any).setFooter === "function") {
+          (ctx.ui as any).setFooter(undefined);
+        }
 
-        // Zero-trace physical cleanup: completely prune the `beautifier` key from settings.json!
         const { targetSettingsPath } = loadConfig(ctx.cwd || process.cwd());
         try {
           if (fs.existsSync(targetSettingsPath)) {
@@ -717,40 +685,112 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
+      // Form A: Interactive plain-language input dialog for Custom Style
       if (styleKey === "custom") {
-        const promptRecipe = [
-          "You are acting as my Pi TUI Status Bar designer for `pi-tui-status-beautifier`.",
-          "1. In my primary language, call `ask_user_question` with ASCII visual preview mockups showing ONLY realistic extension statuses (e.g. `chrome`, `toolflow`, `plan`):",
-          "   - Powerline:  chrome ‹◆ ready›  |  toolflow ‹◈ 2/5›",
-          "   - Matrix:     chrome ⦗✦ ready⦘  |  toolflow ⦗◍ 2/5⦘",
-          "   - Stream:     chrome ❯ ● ready  |  toolflow ❯ ◐ 2/5",
-          "   - Glow:       chrome [ ● ready ]  |  toolflow [ ◐ 2/5 ]",
-          "   (Do NOT include git branch or model name in mockups).",
-          "2. If I describe or pick a style, write the configuration into `./.pi/settings.json` (or `~/.pi/agent/settings.json`) under `beautifier`:",
+        let userDesire: string | undefined;
+        if (typeof (ctx.ui as any).input === "function") {
+          userDesire = await (ctx.ui as any).input(
+            "Describe your custom status bar style:",
+            "e.g. 赛博复古点阵 / Minimal dots / Soft warm pastel / Powerline diamonds"
+          );
+        }
+
+        if (!userDesire || !userDesire.trim()) {
+          return;
+        }
+
+        const instruction = [
+          "Please configure a custom Pi TUI status bar style for `pi-tui-status-beautifier`.",
+          `User's requested aesthetic: "${userDesire.trim()}"`,
+          "",
+          "Requirements:",
+          `1. In the user's primary language, call \`ask_user_question\` with 3 distinct ASCII visual preview mockups tailored to "${userDesire.trim()}". Show ONLY realistic extension status items (e.g. \`chrome\`, \`toolflow\`, \`plan\`). Do NOT include git branch or model name in mockups.`,
+          "2. Once selected, save the configuration into `./.pi/settings.json` (or `~/.pi/agent/settings.json`) under `beautifier`:",
           "   {",
           '     "beautifier": {',
           '       "style": "custom",',
           '       "custom": {',
-          '         "separator": " » ",',
-          '         "brackets": ["«", "»"],',
-          '         "prefix": "",',
-          '         "suffix": "",',
-          '         "glyphs": { "success": "✦", "warning": "◇", "error": "✖", "accent": "✧" }',
+          '         "separator": " ... ",',
+          '         "brackets": ["...", "..."],',
+          '         "prefix": "...",',
+          '         "suffix": "...",',
+          '         "glyphs": { "success": "...", "warning": "...", "error": "...", "accent": "..." }',
           "       }",
           "     }",
           "   }",
-          "3. If I say revert, restore, default, off, or cancel, DELETE the `beautifier` key from `settings.json` and exit quietly without asking more questions.",
-          "4. Do NOT search filesystem or edit extension source files."
+          "3. If the user ever asks to revert, cancel, or restore default, cleanly delete `beautifier` from `settings.json` without asking questions.",
+          "4. Do NOT search the filesystem or edit extension source files. Confirm when applied."
         ].join("\n");
 
-        if (typeof (ctx.ui as any).setEditorText === "function") {
-          (ctx.ui as any).setEditorText(promptRecipe);
-          ctx.ui.notify("Press Enter to let your agent consult your style preference with visual previews!", "info");
-        } else {
-          ctx.ui.notify(promptRecipe, "info");
+        if (typeof (pi as any).sendUserMessage === "function") {
+          (pi as any).sendUserMessage(instruction, { deliverAs: "followUp" });
+          ctx.ui.notify("Consulting AI status bar designer...", "info");
+        } else if (typeof (ctx.ui as any).setEditorText === "function") {
+          (ctx.ui as any).setEditorText(instruction);
+          ctx.ui.notify("Press Enter to send custom style request to your agent!", "info");
         }
         return;
       }
+
+      // Stage 2: Scope Selection Wizard (Two-stage flow)
+      const scopeOptions = [
+        "status-only - Plugin status badges only (Recommended: keeps native Pi path, tokens & thinking level)",
+        "full-footer - Full-footer beautification (Transforms Git branch, model, and tokens too)",
+      ];
+
+      const scopeChoice = await ctx.ui.select("Choose beautification scope:", scopeOptions);
+      if (!scopeChoice) return;
+
+      const isFullFooter = scopeChoice.startsWith("full-footer");
+      fullFooterEnabled = isFullFooter;
+      currentStyle = styleKey;
+      lastRenderedStatus.clear();
+
+      // Write atomically to settings.json
+      const { targetSettingsPath } = loadConfig(ctx.cwd || process.cwd());
+      try {
+        if (fs.existsSync(targetSettingsPath)) {
+          const data = fs.readFileSync(targetSettingsPath, "utf-8");
+          const config = JSON.parse(data);
+          if (!config.beautifier) config.beautifier = {};
+          config.beautifier.style = styleKey;
+          config.beautifier.fullFooter = isFullFooter;
+          const tempSettings = `${targetSettingsPath}.tmp.${process.pid}.${Date.now()}`;
+          fs.writeFileSync(tempSettings, JSON.stringify(config, null, 2), "utf-8");
+          fs.renameSync(tempSettings, targetSettingsPath);
+        }
+      } catch (_e) {
+        // Silently ignore disk write errors
+      }
+
+      // Update footer rendering
+      if (isFullFooter && typeof (ctx.ui as any).setFooter === "function") {
+        (ctx.ui as any).setFooter((tui: any, theme: any, footerData: any) => {
+          const unsub =
+            typeof footerData?.onBranchChange === "function"
+              ? footerData.onBranchChange(() => tui.requestRender())
+              : undefined;
+          return {
+            dispose: unsub,
+            invalidate() {},
+            render(width: number): string[] {
+              if (currentStyle === "off" || !fullFooterEnabled) return [];
+              return renderBeautifiedFooter(width, tui, theme, footerData, ctx, currentStyle, customStyleConfig);
+            },
+          };
+        });
+      } else if (typeof (ctx.ui as any).setFooter === "function") {
+        (ctx.ui as any).setFooter(undefined);
+      }
+
+      for (const [key, val] of originalStatuses.entries()) {
+        ctx.ui.setStatus(key, val);
+      }
+
+      ctx.ui.notify(
+        `TUI status style changed to: ${styleKey} (${isFullFooter ? "Full-Footer" : "Status Only"})`,
+        "info"
+      );
 
       if ((VALID_STYLES as readonly string[]).includes(styleKey)) {
         currentStyle = styleKey;
