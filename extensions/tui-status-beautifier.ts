@@ -179,6 +179,14 @@ export function beautifyStatus(
         const numberMatch = cleanVal.match(NUMBER_PATTERN);
         if (numberMatch) {
           details = numberMatch[1];
+        } else {
+          // If no numeric metric exists, extract the status word descriptor (e.g. "ready", "idle", "cleanup")
+          const wordMatch = cleanVal.match(
+            /(?::\s*|\b)(ready|idle|ok|done|failed|waiting|cleanup|active|online|offline|running|paused|error|success|connected|disconnected)\b/i
+          );
+          if (wordMatch) {
+            details = wordMatch[1].toLowerCase();
+          }
         }
       }
     }
@@ -484,7 +492,7 @@ export default function (pi: ExtensionAPI) {
     originalStatuses.clear();
     lastRenderedStatus.clear();
 
-    // 1. Hook setStatus for granular extension badge formatting
+    // Hook setStatus for clean status badge formatting (never hijack Pi's native footer)
     const originalSetStatus = ctx.ui.setStatus;
     if (originalSetStatus && !(originalSetStatus as any).__beautifierHooked) {
       const wrapped = function (key: string, value: string | undefined) {
@@ -502,25 +510,6 @@ export default function (pi: ExtensionAPI) {
       };
       (wrapped as any).__beautifierHooked = true;
       ctx.ui.setStatus = wrapped;
-    }
-
-    // 2. Hook setFooter for full-footer beautification
-    if (typeof (ctx.ui as any).setFooter === "function") {
-      (ctx.ui as any).setFooter((tui: any, theme: any, footerData: any) => {
-        const unsub =
-          typeof footerData?.onBranchChange === "function"
-            ? footerData.onBranchChange(() => tui.requestRender())
-            : undefined;
-
-        return {
-          dispose: unsub,
-          invalidate() {},
-          render(width: number): string[] {
-            if (currentStyle === "off") return [];
-            return renderBeautifiedFooter(width, tui, theme, footerData, ctx, currentStyle, customStyleConfig);
-          },
-        };
-      });
     }
   });
 

@@ -190,7 +190,7 @@ describe("TUI Status Beautifier Tests", () => {
       expect(lines[0]).toContain("claude-3.5");
       const cleanLine2 = lines[1].replace(/\[\/?\w+\]/g, "");
       expect(cleanLine2).toContain("✦ chrome");
-      expect(cleanLine2).toContain("«✦»");
+      expect(cleanLine2).toContain("«✦ ready»");
     });
   });
 });
