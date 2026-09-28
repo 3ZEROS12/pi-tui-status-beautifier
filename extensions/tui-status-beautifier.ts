@@ -99,6 +99,7 @@ const BRACKET_PATTERN = /\[(\d+)\]/;
 const NUMBER_PATTERN = /\b(\d+)\b/;
 
 let currentStyle = "minimal";
+let fullFooterEnabled = false;
 let customStyleConfig: CustomStyleConfig | undefined;
 
 /**
@@ -107,6 +108,7 @@ let customStyleConfig: CustomStyleConfig | undefined;
  */
 export function loadConfig(cwd: string = process.cwd()): {
   style: string;
+  fullFooter: boolean;
   custom?: CustomStyleConfig;
   targetSettingsPath: string;
 } {
@@ -115,6 +117,7 @@ export function loadConfig(cwd: string = process.cwd()): {
   const localPath = path.join(cwd, ".pi/settings.json");
 
   let resolvedStyle = "minimal";
+  let resolvedFullFooter = false;
   let resolvedCustom: CustomStyleConfig | undefined;
   let hasLocalConfig = false;
 
@@ -130,6 +133,9 @@ export function loadConfig(cwd: string = process.cwd()): {
           } else if ((VALID_STYLES as readonly string[]).includes(s)) {
             resolvedStyle = s;
           }
+        }
+        if (typeof data.beautifier.fullFooter === "boolean") {
+          resolvedFullFooter = data.beautifier.fullFooter;
         }
         if (data.beautifier.custom && typeof data.beautifier.custom === "object") {
           resolvedCustom = data.beautifier.custom;
@@ -152,6 +158,9 @@ export function loadConfig(cwd: string = process.cwd()): {
             resolvedStyle = s;
           }
         }
+        if (typeof data.beautifier.fullFooter === "boolean") {
+          resolvedFullFooter = data.beautifier.fullFooter;
+        }
         if (data.beautifier.custom && typeof data.beautifier.custom === "object") {
           resolvedCustom = { ...(resolvedCustom || {}), ...data.beautifier.custom };
         }
@@ -160,11 +169,12 @@ export function loadConfig(cwd: string = process.cwd()): {
   } catch (_) {}
 
   currentStyle = resolvedStyle;
+  fullFooterEnabled = resolvedFullFooter;
   customStyleConfig = resolvedCustom;
 
   // Target path for atomic write: local project if exists or in project directory, otherwise global
   const targetSettingsPath = hasLocalConfig || fs.existsSync(localPath) ? localPath : globalPath;
-  return { style: resolvedStyle, custom: resolvedCustom, targetSettingsPath };
+  return { style: resolvedStyle, fullFooter: resolvedFullFooter, custom: resolvedCustom, targetSettingsPath };
 }
 
 loadConfig();
@@ -466,26 +476,66 @@ export function renderBeautifiedFooter(
   const modelName = ctx?.model?.name || ctx?.model?.id || "";
   const styledModel = modelName ? (hasThemeFg ? theme.fg("muted", modelName) : modelName) : "";
 
-  // 3. Token metrics
-  let input = 0, output = 0;
-  if (ctx?.sessionManager?.getBranch) {
+  // 3. Token metrics & context usage (full fidelity matching native Pi footer)
+  let input = 0, output = 0, cacheRead = 0, cacheWrite = 0, cost = 0;
+  let latestCacheHitRate: number | undefined;
+
+  if (ctx?.sessionManager?.getEntries) {
     try {
-      for (const e of ctx.sessionManager.getBranch()) {
-        if (e.type === "message" && e.message?.role === "assistant" && e.message?.usage) {
-          const u = e.message.usage;
+      for (const entry of ctx.sessionManager.getEntries()) {
+        if (entry.type === "usage" && entry.usage) {
+          input += entry.usage.input || 0;
+          output += entry.usage.output || 0;
+          cacheRead += entry.usage.cacheRead || 0;
+          cacheWrite += entry.usage.cacheWrite || 0;
+          cost += entry.usage.cost?.total || 0;
+        } else if (entry.type === "message" && entry.message?.role === "assistant" && entry.message?.usage) {
+          const u = entry.message.usage;
           input += u.input || 0;
           output += u.output || 0;
+          cacheRead += u.cacheRead || 0;
+          cacheWrite += u.cacheWrite || 0;
+          cost += u.cost?.total || 0;
+          const promptTokens = (u.input || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
+          if (promptTokens > 0 && u.cacheRead) {
+            latestCacheHitRate = (u.cacheRead / promptTokens) * 100;
+          }
         }
       }
     } catch (_) {}
   }
-  const fmt = (n: number) => (n < 1000 ? `${n}` : `${(n / 1000).toFixed(1)}k`);
-  const tokenStr = input > 0 || output > 0 ? `↑${fmt(input)} ↓${fmt(output)}` : "";
+
+  const fmt = (n: number) => {
+    if (n < 1000) return `${n}`;
+    if (n < 10000) return `${(n / 1000).toFixed(1)}k`;
+    if (n < 1000000) return `${Math.round(n / 1000)}k`;
+    if (n < 10000000) return `${(n / 1000000).toFixed(1)}M`;
+    return `${Math.round(n / 1000000)}M`;
+  };
+
+  const statParts: string[] = [];
+  if (input > 0) statParts.push(`↑${fmt(input)}`);
+  if (output > 0) statParts.push(`↓${fmt(output)}`);
+  if (cacheRead > 0) statParts.push(`R${fmt(cacheRead)}`);
+  if (latestCacheHitRate !== undefined) statParts.push(`CH${latestCacheHitRate.toFixed(1)}%`);
+  if (cost > 0) statParts.push(`$${cost.toFixed(3)}`);
+
+  const contextUsage = ctx?.getContextUsage?.();
+  const contextWindow = contextUsage?.contextWindow || ctx?.model?.contextWindow || 0;
+  if (contextUsage?.percent !== undefined && contextUsage?.percent !== null) {
+    statParts.push(`${contextUsage.percent.toFixed(1)}%/${fmt(contextWindow)} (auto)`);
+  }
+
+  const tokenStr = statParts.join(" ");
   const styledTokens = tokenStr ? (hasThemeFg ? theme.fg("dim", tokenStr) : tokenStr) : "";
+
+  // Thinking level
+  const thinking = ctx?.thinkingLevel && ctx.thinkingLevel !== "off" ? ` • ${ctx.thinkingLevel}` : "";
+  const fullModelStr = styledModel ? `${styledModel}${hasThemeFg ? theme.fg("dim", thinking) : thinking}` : "";
 
   // Left & right parts of Line 1
   const leftText = styledBranch;
-  const rightParts = [styledTokens, styledModel].filter(Boolean);
+  const rightParts = [styledTokens, fullModelStr].filter(Boolean);
   const rightText = rightParts.join(styledSep);
 
   const leftVis = getStringWidth(leftText);
@@ -534,7 +584,7 @@ export default function (pi: ExtensionAPI) {
     originalStatuses.clear();
     lastRenderedStatus.clear();
 
-    // Hook setStatus for clean status badge formatting (never hijack Pi's native footer)
+    // 1. Hook setStatus for clean status badge formatting (always active unless style === "off")
     const originalSetStatus = ctx.ui.setStatus;
     if (originalSetStatus && !(originalSetStatus as any).__beautifierHooked) {
       const wrapped = function (key: string, value: string | undefined) {
@@ -553,6 +603,28 @@ export default function (pi: ExtensionAPI) {
       (wrapped as any).__beautifierHooked = true;
       ctx.ui.setStatus = wrapped;
     }
+
+    // 2. Hook setFooter ONLY if user explicitly opted in with fullFooter === true!
+    // By default fullFooter is FALSE: Pi's native top two lines remain 100% native and untouched!
+    if (fullFooterEnabled && currentStyle !== "off" && typeof (ctx.ui as any).setFooter === "function") {
+      (ctx.ui as any).setFooter((tui: any, theme: any, footerData: any) => {
+        const unsub =
+          typeof footerData?.onBranchChange === "function"
+            ? footerData.onBranchChange(() => tui.requestRender())
+            : undefined;
+
+        return {
+          dispose: unsub,
+          invalidate() {},
+          render(width: number): string[] {
+            if (currentStyle === "off" || !fullFooterEnabled) return [];
+            return renderBeautifiedFooter(width, tui, theme, footerData, ctx, currentStyle, customStyleConfig);
+          },
+        };
+      });
+    } else if (typeof (ctx.ui as any).setFooter === "function") {
+      (ctx.ui as any).setFooter(undefined); // Restore native Pi footer
+    }
   });
 
   // Dynamic status bar style controller registry
@@ -569,6 +641,7 @@ export default function (pi: ExtensionAPI) {
         "matrix    - Dot-matrix brackets & stars (e.g. name ⦗✦ ready⦘)",
         "glow      - High-contrast inverse pill (e.g. name [ ● ready ])",
         "custom    - [AI Prompt Recipe] Let your agent tailor your bespoke style",
+        `footer    - Toggle Full-Footer beautification (Git/Model/Tokens) [Currently: ${fullFooterEnabled ? "ON" : "OFF"}]`,
         "off       - Revert to native Pi status bar & clean settings",
       ];
 
@@ -577,6 +650,41 @@ export default function (pi: ExtensionAPI) {
       if (!choice) return;
 
       const styleKey = choice.split(" ")[0].trim();
+
+      if (styleKey === "footer") {
+        fullFooterEnabled = !fullFooterEnabled;
+        const { targetSettingsPath } = loadConfig(ctx.cwd || process.cwd());
+        try {
+          if (fs.existsSync(targetSettingsPath)) {
+            const data = fs.readFileSync(targetSettingsPath, "utf-8");
+            const config = JSON.parse(data);
+            if (!config.beautifier) config.beautifier = {};
+            config.beautifier.fullFooter = fullFooterEnabled;
+            const tempSettings = `${targetSettingsPath}.tmp.${process.pid}.${Date.now()}`;
+            fs.writeFileSync(tempSettings, JSON.stringify(config, null, 2), "utf-8");
+            fs.renameSync(tempSettings, targetSettingsPath);
+          }
+        } catch (_) {}
+
+        if (fullFooterEnabled && currentStyle !== "off" && typeof (ctx.ui as any).setFooter === "function") {
+          (ctx.ui as any).setFooter((tui: any, theme: any, footerData: any) => {
+            const unsub = typeof footerData?.onBranchChange === "function" ? footerData.onBranchChange(() => tui.requestRender()) : undefined;
+            return {
+              dispose: unsub,
+              invalidate() {},
+              render(width: number): string[] {
+                if (currentStyle === "off" || !fullFooterEnabled) return [];
+                return renderBeautifiedFooter(width, tui, theme, footerData, ctx, currentStyle, customStyleConfig);
+              }
+            };
+          });
+        } else if (typeof (ctx.ui as any).setFooter === "function") {
+          (ctx.ui as any).setFooter(undefined);
+        }
+
+        ctx.ui.notify(`Full-footer beautification is now ${fullFooterEnabled ? "ENABLED" : "DISABLED (Native Pi Footer)"}`, "info");
+        return;
+      }
 
       if (styleKey === "off") {
         currentStyle = "off";
