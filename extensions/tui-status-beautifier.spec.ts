@@ -5,6 +5,7 @@ import {
   sliceToVisualWidth,
   padToVisualWidth,
   renderBeautifiedFooter,
+  formatFoldedBadges,
   loadConfig
 } from "./tui-status-beautifier";
 
@@ -208,6 +209,36 @@ describe("TUI Status Beautifier Tests", () => {
       const cleanLine2 = lines[1].replace(/\[\/?\w+\]/g, "");
       expect(cleanLine2).toContain("✦ chrome");
       expect(cleanLine2).toContain("«✦ ready»");
+    });
+  });
+
+  describe("Adaptive Badge Folding & Symbology", () => {
+    it("assigns ⌖ symbol to anchor and ⌬ symbol to toolflow", () => {
+      const anchorOut = beautifyStatus("anchor", "ready", mockTheme, "stream") || "";
+      const toolflowOut = beautifyStatus("toolflow", "ready", mockTheme, "stream") || "";
+      expect(anchorOut).toContain("⌖");
+      expect(toolflowOut).toContain("⌬");
+    });
+
+    it("folds idle badges into (+N idle) on narrow terminal widths", () => {
+      const rawBadges = [
+        { key: "chrome", val: "ready", rendered: "chrome ❯ ● ready", isHighPriority: false },
+        { key: "plan", val: "ready", rendered: "plan ❯ ● ready", isHighPriority: false },
+        { key: "toolflow", val: "running", rendered: "toolflow ❯ ◐ 1/3", isHighPriority: true },
+        { key: "subagent", val: "ready", rendered: "subagent ❯ ● ready", isHighPriority: false },
+      ];
+
+      // On wide terminal: renders all
+      const wide = formatFoldedBadges(rawBadges, 200, mockTheme);
+      expect(wide).toContain("chrome");
+      expect(wide).toContain("plan");
+      expect(wide).toContain("subagent");
+      expect(wide).not.toContain("idle");
+
+      // On narrow terminal (e.g. 50 chars max): keeps running toolflow and folds idle badges!
+      const narrow = formatFoldedBadges(rawBadges, 50, mockTheme);
+      expect(narrow).toContain("toolflow");
+      expect(narrow).toContain("(+3 idle)");
     });
   });
 });

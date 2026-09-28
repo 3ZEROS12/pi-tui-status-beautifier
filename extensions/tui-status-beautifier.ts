@@ -14,7 +14,11 @@ const COMMON_NAMES: Record<string, string> = {
   "pi-control-chrome": "chrome",
   chrome: "chrome",
   toolflow: "toolflow",
+  anchor: "anchor",
+  "pi-anchor": "anchor",
 };
+
+const SPINNERS = ["◐", "◓", "◑", "◒"] as const;
 
 export interface CustomStyleConfig {
   prefix?: string;
@@ -292,9 +296,32 @@ export function beautifyStatus(
 
     // 4. Determine state glyph & indicator
     const glyphMap = preset.glyphs || {};
-    let glyph =
-      glyphMap[state] ||
-      (state === "warning" ? "◌" : state === "error" ? "▲" : state === "accent" ? "◆" : "●");
+    let defaultGlyph =
+      name === "anchor"
+        ? "⌖"
+        : name === "toolflow"
+          ? "⌬"
+          : state === "warning"
+            ? "◌"
+            : state === "error"
+              ? "▲"
+              : state === "accent"
+                ? "◆"
+                : "●";
+
+    // Dynamic micro-spinner for active in-progress / running states (running, working, starting, waiting)
+    if (
+      valLower.includes("running") ||
+      valLower.includes("working") ||
+      valLower.includes("starting") ||
+      valLower.includes("waiting") ||
+      valLower.includes("...")
+    ) {
+      const spinnerChar = SPINNERS[Math.floor(Date.now() / 300) % SPINNERS.length];
+      defaultGlyph = spinnerChar;
+    }
+
+    let glyph = glyphMap[state] || defaultGlyph;
 
     const hasThemeFg = theme && typeof theme.fg === "function";
     const coloredGlyph = hasThemeFg ? theme.fg(state, glyph) : glyph;
@@ -441,6 +468,58 @@ export function padToVisualWidth(str: string, targetWidth: number, padChar = " "
 }
 
 /**
+ * Formats multiple status badges with adaptive folding for narrow terminals (< 80 columns)
+ */
+export function formatFoldedBadges(
+  rawBadges: Array<{ key: string; val: string; rendered: string; isHighPriority: boolean }>,
+  maxWidth: number,
+  theme: any
+): string {
+  const fullStr = rawBadges.map(b => b.rendered).join("  ");
+  if (getStringWidth(fullStr) <= maxWidth || rawBadges.length <= 2) {
+    return fullStr;
+  }
+
+  // Narrow terminal overflow: partition high priority from idle/ready badges
+  const highPriority = rawBadges.filter(b => b.isHighPriority);
+  const lowPriority = rawBadges.filter(b => !b.isHighPriority);
+
+  const foldBadge = (count: number) => {
+    const text = `(+${count} idle)`;
+    return theme && typeof theme.fg === "function" ? theme.fg("dim", text) : text;
+  };
+
+  if (highPriority.length === 0) {
+    let current = "";
+    let shown = 0;
+    for (const b of lowPriority) {
+      const candidate = (current ? current + "  " : "") + b.rendered;
+      const withFold = candidate + "  " + foldBadge(lowPriority.length - shown - 1);
+      if (getStringWidth(withFold) <= maxWidth) {
+        current = candidate;
+        shown++;
+      } else {
+        break;
+      }
+    }
+    if (shown < lowPriority.length) {
+      const remaining = lowPriority.length - shown;
+      return current ? `${current}  ${foldBadge(remaining)}` : foldBadge(remaining);
+    }
+    return current;
+  }
+
+  const highStr = highPriority.map(b => b.rendered).join("  ");
+  if (lowPriority.length > 0) {
+    const withFold = highStr + "  " + foldBadge(lowPriority.length);
+    if (getStringWidth(withFold) <= maxWidth) {
+      return withFold;
+    }
+  }
+  return highStr;
+}
+
+/**
  * Full-Footer Renderer (Hooked via ctx.ui.setFooter)
  * Formats working folder, Git branch, token metrics, and active model on Line 1,
  * and formats all extension statuses on Line 2.
@@ -564,11 +643,24 @@ export function renderBeautifiedFooter(
   }
 
   if (extStatuses.length > 0) {
-    const badges = extStatuses
-      .map(([k, v]) => beautifyStatus(k, v, theme, style, customCfg))
-      .filter(Boolean) as string[];
-    if (badges.length > 0) {
-      lines.push(badges.join("  "));
+    const rawBadges = extStatuses
+      .map(([k, v]) => {
+        const rendered = beautifyStatus(k, v, theme, style, customCfg);
+        if (!rendered) return null;
+        const valLower = (v || "").toLowerCase();
+        const isHigh =
+          valLower.includes("error") ||
+          valLower.includes("fail") ||
+          valLower.includes("warn") ||
+          valLower.includes("running") ||
+          valLower.includes("active") ||
+          valLower.includes("starting");
+        return { key: k, val: v, rendered, isHighPriority: isHigh };
+      })
+      .filter(Boolean) as Array<{ key: string; val: string; rendered: string; isHighPriority: boolean }>;
+
+    if (rawBadges.length > 0) {
+      lines.push(formatFoldedBadges(rawBadges, width - 2, theme));
     }
   }
 
