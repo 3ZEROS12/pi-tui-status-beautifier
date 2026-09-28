@@ -1,6 +1,6 @@
 {
   "name": "pi-tui-status-beautifier",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Minimalist status bar formatter & AI-customizable layout engine for Pi TUI.",
   "main": "extensions/tui-status-beautifier.ts",
   "keywords": [

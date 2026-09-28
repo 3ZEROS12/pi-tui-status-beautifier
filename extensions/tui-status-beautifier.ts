@@ -329,15 +329,15 @@ export default function (pi: ExtensionAPI) {
 
       if (styleKey === "custom") {
         const promptRecipe = [
-          "Please customize my Pi TUI status bar style in `tui-status-beautifier.ts`.",
-          "1. Inspect the installed extension (`~/.pi/agent/npm/node_modules/pi-tui-status-beautifier/extensions/tui-status-beautifier.ts` or local repo).",
-          "2. In `beautifyStatus()`, design a bespoke status bar layout matching my taste (custom separators, status glyphs, brackets, and theme colors: accent/success/warning/error/muted/dim).",
-          "3. Apply the new style as default and show me a preview of the updated format."
+          "You are acting as my Pi TUI Status Bar designer.",
+          "1. Detect my primary language from our recent conversation history or environment locale.",
+          "2. In that EXACT primary language, proactively ask me what visual aesthetic I want for my status bar, and propose 3 distinct creative ideas (e.g. Cyberpunk Dot-Matrix, Warm Minimalist, High-Contrast Pill).",
+          "3. Wait for my preference or feedback, then inspect `tui-status-beautifier.ts` and apply the custom layout for me."
         ].join("\n");
 
         if (typeof (ctx.ui as any).setEditorText === "function") {
           (ctx.ui as any).setEditorText(promptRecipe);
-          ctx.ui.notify("Custom style prompt loaded into editor. Edit your preferences and press Enter!", "info");
+          ctx.ui.notify("Press Enter to let your agent consult your style preference in your native language!", "info");
         } else {
           ctx.ui.notify(promptRecipe, "info");
         }
