@@ -16,6 +16,8 @@ const COMMON_NAMES: Record<string, string> = {
   toolflow: "toolflow",
   anchor: "anchor",
   "pi-anchor": "anchor",
+  lingual: "lingual",
+  "pi-lingual": "lingual",
 };
 
 const SPINNERS = ["◐", "◓", "◑", "◒"] as const;
@@ -301,13 +303,15 @@ export function beautifyStatus(
         ? "⌖"
         : name === "toolflow"
           ? "⌬"
-          : state === "warning"
-            ? "◌"
-            : state === "error"
-              ? "▲"
-              : state === "accent"
-                ? "◆"
-                : "●";
+          : name === "lingual"
+            ? "⇄"
+            : state === "warning"
+              ? "◌"
+              : state === "error"
+                ? "▲"
+                : state === "accent"
+                  ? "◆"
+                  : "●";
 
     // Dynamic micro-spinner for active in-progress / running states (running, working, starting, waiting)
     if (

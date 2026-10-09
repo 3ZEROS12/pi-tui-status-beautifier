@@ -87,6 +87,7 @@ The engine strips internal package naming suffixes (`-extension`, `-plugin`, `-a
 * `pi-control-chrome` ➔ `chrome` (status dot `●`)
 * `pi-anchor` ➔ `anchor` (anchor glyph `⌖`)
 * `toolflow` ➔ `toolflow` (flow glyph `⌬`)
+* `pi-lingual` ➔ `lingual` (exchange glyph `⇄`)
 * In-progress tasks (`running`, `working`, `...`) automatically trigger a 300ms terminal micro-spinner (`◐`, `◓`, `◑`, `◒`).
 
 ### 4. Zero-Ceremony AI Co-Design (`/beautify custom`)
@@ -180,6 +181,23 @@ npm install
 npm test            # 18/18 Vitest unit tests pass
 npm run lint        # Zero ESLint warnings
 ```
+
+---
+
+## Author's Note
+
+The reason I created `pi-tui-status-beautifier` comes from a simple aesthetic frustration in daily terminal pairing: visual noise.
+
+As I installed multiple extensions for Pi (`pi-mcp-adapter`, `plannotator`, `toolflow`, `pi-anchor`, `pi-lingual`), the status bar quickly deteriorated into a chaotic billboard. Every extension author used their own punctuation, raw emojis, and arbitrary string widths. In split-pane tmux or compact terminal windows, lines tore, right-side borders wrapped onto new rows, and the screen constantly flickered.
+
+When I looked into existing status bar plugins, many took a sledgehammer approach: completely replacing Pi's native footer via `ctx.ui.setFooter`. In doing so, they wiped out essential platform metrics—token usage, cache read rates, thinking levels, and git branches. Even worse, some plugins read configuration files synchronously inside the animation redraw loop, causing typing sluggishness.
+
+I built this beautifier around three strict constraints:
+1. Non-destructive scoping: never hijack host platform telemetry; normalize only the extension status badges;
+2. Zero render-loop disk I/O: cache settings in memory and skip duplicate renders;
+3. Zero-trace revert: turning it off physically deletes the config block (`delete config.beautifier`), leaving zero psychological or schema clutter.
+
+A good status bar should be quiet, balanced, and invisible until you need it.
 
 ---
 
