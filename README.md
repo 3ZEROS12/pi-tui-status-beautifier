@@ -1,7 +1,8 @@
 # pi-tui-status-beautifier
 
-> **Minimalist status bar formatter & AI-customizable layout engine for Pi TUI**  
-> Normalizes verbose, mismatched extension status badges into clean, coherent typography with zero runtime render-loop disk I/O.
+Minimalist status bar formatter & layout engine for Pi TUI.
+
+Clean up fragmented extension status strings. Enjoy adaptive narrow-terminal folding and zero render-loop disk I/O, with zero telemetry hijacking.
 
 [![npm version](https://img.shields.io/npm/v/pi-tui-status-beautifier?color=blue)](https://www.npmjs.com/package/pi-tui-status-beautifier)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -22,24 +23,58 @@
   └─────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+## Quick Start
+
+Install directly inside Pi:
+
+```bash
+pi install npm:pi-tui-status-beautifier
+```
+
+Takes effect immediately. Type `/beautify` anytime to switch styles interactively.
+
 ---
 
-## Why pi-tui-status-beautifier?
+## Core Value: Why Do Developers Need This?
 
-As the Pi terminal ecosystem grows, developers routinely install multiple extensions (`plannotator`, `pi-mcp-adapter`, `toolflow`, `pi-anchor`, `pi-control-chrome`, `pi-lingual`). Over time, the footer status bar deteriorates into visual chaos:
+As the Pi extension ecosystem grows, developers routinely install multiple tools (`plannotator`, `pi-mcp-adapter`, `toolflow`, `pi-anchor`, `pi-lingual`). The status bar quickly runs into four frictions:
 
-1. **Inconsistent Syntax & Naming**: Every extension authors status strings independently. Some prefix long package names (`pi-mcp-adapter:`), some wrap counts in brackets (`[2]`), while others dump raw emojis or status sentences. The lack of standard metrics distracts focus during coding flow.
-2. **Narrow Terminal Line Wrapping**: In split-pane layouts (tmux, WezTerm, iTerm2 panes `< 80` columns), long status strings wrap onto multiple lines or tear off the edge of the screen, pushing input prompts up and down.
-3. **Surrogate-Pair & CJK Misalignments**: Emojis, East Asian Wide (CJK) characters, and zero-width joiners (ZWJ) trigger width calculation discrepancies in naive string formatters, leading to flickering and cursor misalignment.
-4. **Render-Loop Disk Latency**: Reading configuration files inside high-frequency TUI animation loops introduces I/O thrashing and terminal sluggishness.
+### 1. Inconsistent Syntax & Visual Clutter
+Every extension authors status text independently. Some prefix long package names (`pi-mcp-adapter:`), some wrap counts in brackets (`[2]`), and others dump raw emojis. Inconsistent character metrics create visual distraction at the bottom of your screen.
+`pi-tui-status-beautifier` strips package suffixes and normalizes raw text into uniform, structured micro-badges.
 
-`pi-tui-status-beautifier` acts as a non-intrusive normalization layer. It intercepts `ctx.ui.setStatus` calls, sanitizes ANSI and surrogate characters, dynamically maps state signals into uniform badges, and folds idle items when horizontal space tightens.
+### 2. Narrow Terminal Line Wrapping
+In split-pane layouts (tmux, WezTerm, or windows `< 80` columns), long status strings wrap onto multiple lines, shoving your prompt up and down and breaking typing flow.
+The built-in column budget guard automatically collapses idle badges into `(+3 idle)` when width tightens, prioritizing errors and running tasks.
+
+### 3. Never Hijacks Platform Telemetry
+Many status bar plugins take a heavy-handed approach: completely replacing Pi's native footer via `ctx.ui.setFooter`. In doing so, they wipe out essential system metrics—git branches, token counts (`↑1.2k ↓3.4k`), cache read rates, and thinking levels (`• high`).
+This extension defaults to a **non-intrusive micro-hook (`status-only`)**: it normalizes extension badges while leaving Pi's native system telemetry 100% intact.
+
+### 4. Zero Render-Loop Disk I/O
+Reading configuration files synchronously inside high-frequency TUI animation redraw loops causes disk contention and sluggish typing.
+This extension loads settings into memory at startup and uses dirty-checking caches, performing **zero synchronous file reads** during TUI redraws.
+
+---
+
+## How It Works: The Action Matrix
+
+```text
+  /beautify (Open interactive theme switcher anytime)
+```
+
+| Mode / Scenario | What You Do | What the Beautifier Does | What You See | Best For |
+| :--- | :--- | :--- | :--- | :--- |
+| **`stream`** *(Default)* | Install extensions normally | Strips package prefixes and normalizes badges | `plan ❯ ◆ 3  mcp ❯ ● ready  anchor ❯ ⌖ 3` | Minimalist everyday pairing |
+| **Narrow Split Panes** | tmux split width `< 80` cols | Preserves active badges, condenses idle items | `toolflow ❯ ⌬ running (2/5)  (+3 idle)` | Split panes without line wrap |
+| **`full-footer`** *(Panorama)* | Enable full footer mode | Formats unified two-line layout | Line 1: Git/Token/Model; Line 2: Normalized badges | Geek panoramic overview |
+| **`off`** *(Clean Revert)* | Run `/beautify off` | Physically deletes `beautifier` key from `settings.json` | 100% native unformatted status bar, 0 residue | Zero-regret testing |
 
 ---
 
 ## Preset Gallery & Visual Themes
 
-Switch styles interactively with `/beautify`:
+Type `/beautify` to switch styles interactively:
 
 ```text
   1. stream (Default Minimalist Stream)
@@ -58,68 +93,34 @@ Switch styles interactively with `/beautify`:
      chrome     ❯ ● ready    toolflow   ❯ ⌬ 2/5    anchor     ❯ ⌖ 3
 
   6. custom (AI-Assisted Co-Design)
-     Generates bespoke separators, framing glyphs, and status indicators matching your aesthetic.
+     Describe your aesthetic in plain text; your agent generates 3 ASCII mockups.
 ```
 
 ---
 
-## Core Capabilities & Architectural Design
+## Engineering Highlights
 
-### 1. Dual-Scope Formatting Architecture
-When configuring `/beautify`, you choose between two execution scopes:
-* **`status-only` (Default & Recommended)**: Only hooks `ctx.ui.setStatus` badges. Leaves Pi's native Git branch, working directory, context window percentages, token telemetry (`↑1.2k ↓3.4k R8.9k`), and thinking levels (`• high`) 100% native and untouched.
-* **`full-footer` (Integrated Geek Footer)**: Replaces the entire bottom bar with a unified two-line layout:
-  * **Line 1**: Folder & Git branch on the left; token metrics, context cache hit rates, model identifier, and reasoning level on the right.
-  * **Line 2**: Normalized extension status badges with automatic column budgeting.
-
-### 2. Adaptive Folding for Narrow Terminals (< 80 Cols)
-In compact split panes, status items risk overflowing terminal boundaries. `pi-tui-status-beautifier` partitions active extensions into two priority tiers:
-* **High-Priority (Active/Warning/Error)**: Badges displaying `running`, `working`, `starting`, `error`, `failed`, or `pause` are always preserved at full fidelity.
-* **Low-Priority (Idle/Ready/Ok)**: When line width exceeds maximum available columns, idle badges are automatically condensed into a compact indicator:
-  ```text
-  toolflow ❯ ⌬ running (2/5)    plan ❯ ▲ error    (+3 idle)
-  ```
-
-### 3. Dedicated Extension Identity & Micro-Spinners
-The engine strips internal package naming suffixes (`-extension`, `-plugin`, `-adapter`, `-slash-text`) and maps established ecosystem tools to clean semantic identities:
-* `plannotator` ➔ `plan` (accent glyph `◆`)
-* `pi-mcp-adapter` ➔ `mcp` (status dot `●`)
-* `pi-control-chrome` ➔ `chrome` (status dot `●`)
-* `pi-anchor` ➔ `anchor` (anchor glyph `⌖`)
-* `toolflow` ➔ `toolflow` (flow glyph `⌬`)
-* `pi-lingual` ➔ `lingual` (exchange glyph `⇄`)
-* In-progress tasks (`running`, `working`, `...`) automatically trigger a 300ms terminal micro-spinner (`◐`, `◓`, `◑`, `◒`).
-
-### 4. Zero-Ceremony AI Co-Design (`/beautify custom`)
-Want a unique terminal aesthetic without manually editing code?
-1. Run `/beautify` and select `custom`.
-2. Enter your desired aesthetic in plain text (e.g. *"Cyberpunk neon dots"*, *"Nordic minimal pastels"*, *"Subtle dashed brackets"*).
-3. The beautifier dispatches a structured prompt recipe to your active Coding Agent.
-4. Your agent presents **3 distinct ASCII visual mockups** via interactive selection and writes the chosen configuration directly to `./.pi/settings.json`.
+- 🛡️ **Non-Destructive Dual Scopes**:
+  * `status-only` (Default & Recommended): Only hooks `ctx.ui.setStatus` badges. Preserves Pi's native Git branch, working directory, token counts, and thinking levels 100% untouched.
+  * `full-footer`: Formats the entire bottom bar with system telemetry on line 1 and badges on line 2.
+- 📐 **Unicode UAX #11 & Surrogate-Pair Safety**: Built-in character scanner accurately measures East Asian Wide (2 cols), ASCII (1 col), and ANSI escape codes (0 cols), eliminating cursor jitter and column misalignments.
+- ⚡ **Zero Render-Loop Disk I/O**: Loads configuration once into memory. Redraw loops perform zero synchronous disk reads (`fs.readFileSync`), using dirty-checking to skip duplicate renders.
+- ◐ **Terminal Micro-Spinners**: Active background tasks (`running`, `working`) trigger a smooth 300ms spinner (`◐`, `◓`, `◑`, `◒`).
+- 🗑️ **Zero-Trace Physical Cleanup (`off`)**: Turning the extension off restores all original status strings and deletes the `beautifier` block from `settings.json`, leaving zero orphaned configuration behind.
 
 ---
 
-## Under-The-Hood Engineering
+## Commands & Configuration
 
-### Unicode UAX #11 & Surrogate-Pair Safety
-Terminal character counting based on `string.length` breaks when encountering emojis, Chinese/Japanese characters, or surrogate pairs. `pi-tui-status-beautifier` implements a standalone `codePointAt(0)` scanner (`src/extensions/tui-status-beautifier.ts`):
-* Accurately measures East Asian Wide (2 visual columns), ASCII (1 column), and zero-width markers (0 columns).
-* Explicitly ignores Zero-Width Joiners (`0x200d`), Emoji Variation Selectors (`0xfe0f`, `0xfe0e`), and combining diacritics (`0x0300..0x036f`).
-* Implements `sliceToVisualWidth` to truncate long identifiers without severing multibyte surrogate pairs.
+### Interactive Command
+```bash
+/beautify                # Open interactive style picker
+/beautify stream         # Switch directly to stream preset
+/beautify off            # Revert to native status bar and delete config
+```
 
-### Zero Render-Loop Disk I/O & Dirty-Checking
-* **Cached Memory Reads**: Configuration is loaded into memory at startup. Normal TUI redraw loops perform **zero synchronous file reads (`fs.readFileSync`)**.
-* **State Dirty-Checking**: Renders are cached per badge (`${key}:${currentStyle}`). If an extension sends an identical status string, formatting is skipped, avoiding redundant string allocations.
-* **Atomic Settings Writes**: Style updates via `/beautify` use atomic file replacement (`writeFileSync(temp)` + `renameSync(temp, target)`), preventing corrupt settings files if the process is terminated mid-write.
-
-### Zero-Trace Physical Cleanup (`off`)
-Selecting `off` cleanly restores all original unformatted status strings to `ctx.ui.setStatus`, unhooks the footer, and deletes the `beautifier` block from `settings.json`. It leaves zero orphaned configuration schema behind.
-
----
-
-## Configuration Reference
-
-Settings reside under `"beautifier"` in `./.pi/settings.json` (project-level) or `~/.pi/agent/settings.json` (global):
+### Settings Schema
+Preferences persist in `./.pi/settings.json` (project-level) or `~/.pi/agent/settings.json` (global):
 
 ```json
 {
@@ -130,74 +131,31 @@ Settings reside under `"beautifier"` in `./.pi/settings.json` (project-level) or
 }
 ```
 
-### Custom Style Schema (`style: "custom"`)
-```json
-{
-  "beautifier": {
-    "style": "custom",
-    "fullFooter": false,
-    "custom": {
-      "prefix": "",
-      "suffix": "",
-      "separator": " ❯ ",
-      "brackets": ["⦗", "⦘"],
-      "inverse": false,
-      "padName": false,
-      "glyphs": {
-        "success": "●",
-        "warning": "◌",
-        "error": "▲",
-        "accent": "◆"
-      }
-    }
-  }
-}
-```
-
----
-
-## Installation & Usage
-
-### Install as a Pi Extension
-```bash
-# Recommended: Install from npm
-pi install npm:pi-tui-status-beautifier
-
-# Or install from GitHub
-pi install git:github.com/3ZEROS12/pi-tui-status-beautifier
-```
-
-### Interactive Command
-Type `/beautify` inside any active Pi session to open the interactive style selector:
-```text
-/beautify
-```
-
-### Development & Testing
-```bash
-git clone https://github.com/3ZEROS12/pi-tui-status-beautifier.git
-cd pi-tui-status-beautifier
-npm install
-npm test            # 18/18 Vitest unit tests pass
-npm run lint        # Zero ESLint warnings
-```
-
 ---
 
 ## Author's Note
 
-The reason I created `pi-tui-status-beautifier` comes from a simple aesthetic frustration in daily terminal pairing: visual noise.
+The inspiration behind `pi-tui-status-beautifier` comes from daily aesthetic frustration: visual noise.
 
-As I installed multiple extensions for Pi (`pi-mcp-adapter`, `plannotator`, `toolflow`, `pi-anchor`, `pi-lingual`), the status bar quickly deteriorated into a chaotic billboard. Every extension author used their own punctuation, raw emojis, and arbitrary string widths. In split-pane tmux or compact terminal windows, lines tore, right-side borders wrapped onto new rows, and the screen constantly flickered.
+As I installed more extensions for Pi, the bottom status bar turned into a chaotic billboard. Every extension author used their own punctuation, raw emojis, and arbitrary string widths. In split-pane tmux or compact windows, lines wrapped awkwardly and the screen constantly flickered.
 
 When I looked into existing status bar plugins, many took a sledgehammer approach: completely replacing Pi's native footer via `ctx.ui.setFooter`. In doing so, they wiped out essential platform metrics—token usage, cache read rates, thinking levels, and git branches. Even worse, some plugins read configuration files synchronously inside the animation redraw loop, causing typing sluggishness.
 
 I built this beautifier around three strict constraints:
-1. Non-destructive scoping: never hijack host platform telemetry; normalize only the extension status badges;
-2. Zero render-loop disk I/O: cache settings in memory and skip duplicate renders;
-3. Zero-trace revert: turning it off physically deletes the config block (`delete config.beautifier`), leaving zero psychological or schema clutter.
+1. **Never hijack native telemetry**: Normalize extension badges while keeping system metrics untouched.
+2. **Zero render-loop disk reads**: Memory-cached configuration with dirty-checking.
+3. **Zero-trace revert**: Turning it off physically deletes the config block (`delete config.beautifier`).
 
 A good status bar should be quiet, balanced, and invisible until you need it.
+
+---
+
+## Verification & Testing
+
+```bash
+npm test            # 18/18 Vitest unit tests pass
+npm run lint        # Zero ESLint warnings
+```
 
 ---
 

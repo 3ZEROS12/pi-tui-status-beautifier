@@ -1,7 +1,8 @@
 # pi-tui-status-beautifier
 
-> **专为 Pi TUI 打造的极简状态栏规范化引擎与 AI 可定制排版扩展**  
-> 统一碎片化、参差不齐的插件状态字符串，呈现规整、高颜值的终端排版，运行时渲染循环 0 磁盘 I/O 开销。
+面向 Pi TUI 的极简状态栏规范化引擎与可定制排版扩展。
+
+告别混乱杂乱的终端底栏。统一扩展状态字符串，分屏自动折叠，渲染循环 0 磁盘 I/O 开销，绝不劫持系统原生遥测。
 
 [![npm version](https://img.shields.io/npm/v/pi-tui-status-beautifier?color=blue)](https://www.npmjs.com/package/pi-tui-status-beautifier)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -22,104 +23,104 @@
   └─────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+## 一键安装
 
-## 现实工程痛点
+在 Pi 终端内直接运行：
 
-随着 Pi 插件生态日益丰富，开发者在日常会话中常安装多个能力扩展（如 `plannotator`、`pi-mcp-adapter`、`toolflow`、`pi-anchor`、`pi-control-chrome`、`pi-lingual` 等）。底栏状态逐渐暴露出以下问题：
+```bash
+pi install npm:pi-tui-status-beautifier
+```
 
-1. **命名风格与状态语法缺乏规范**：各插件作者独立编写状态文本。有的带长包名前缀（`pi-mcp-adapter:`），有的用括号包裹数值（`[2]`），有的输出原生 emoji，长短不一的字符在终端底部不断拉扯视线。
-2. **窄屏终端被动折行溢出**：在分屏（tmux、WezTerm 或窗口列宽 `< 80`）环境下，冗长的状态字符串容易被强制折行，把编辑输入框向上挤压，破坏敲代码的心流。
-3. **Unicode、CJK 与零宽字符错位**：多字节宽字符、Emoji 与零宽连接符（ZWJ）常使基于普通字符串长度的格式化工具计算失准，导致终端光标抖动和排版错位。
-4. **渲染循环的磁盘 I/O 争用**：在终端高频重绘动画中重复读取配置文件，容易引发磁盘 I/O 开销与终端卡顿。
-
-`pi-tui-status-beautifier` 作为纯净的中间层运行。它拦截 `ctx.ui.setStatus` 调用，安全清洗 ANSI 控制序列与多字节代理对，将运行状态映射为结构规整的微型徽章，并在水平列宽紧张时智能折叠闲置插件。
+安装即可直接生效。输入 `/beautify` 随时交互式切换预设风格。
 
 ---
 
-## 核心预设画廊与样式对比
+## 核心价值：为什么需要它？
+
+随着 Pi 插件生态日益丰富，开发者通常会安装多个扩展（`plannotator`、`pi-mcp-adapter`、`toolflow`、`pi-anchor`、`pi-lingual` 等）。底栏状态常面临四重困扰：
+
+### 1. 命名风格与格式杂乱无章
+各插件作者独立编写状态文本。有的带长包名前缀（`pi-mcp-adapter:`），有的用括号包裹数值（`[2]`），有的输出原生 emoji。长短不一的字符串在屏幕底部不断拉扯视线。
+`pi-tui-status-beautifier` 自动剥离包名后缀，将杂乱状态统一规范为结构清晰的微型徽章。
+
+### 2. 窄分屏下强制折行溢出
+在 tmux、WezTerm 等多分屏环境下（列宽 `< 80`），冗长的状态字符串容易被强制折行，把编辑输入框向上挤压，破坏打字心流。
+插件内置列宽预算守卫。当宽度紧张时，自动将闲置状态折叠为 `(+3 idle)`，优先保全报错与执行中状态。
+
+### 3. 绝不劫持系统原生遥测数据
+许多底栏美化工具采用粗暴的全局覆盖，把 Pi 原生的 Git 分支、Token 消耗（`↑1.2k ↓3.4k`）、上下文缓存率和思考级别（`• high`）全部冲掉。
+本扩展默认采用**非侵入式微钩子（status-only）**：仅规范化插件状态徽章，Pi 原生的所有底层遥测数据 100% 原样保留。
+
+### 4. 渲染循环 0 磁盘 I/O 损耗
+在终端高频重绘动画中读取配置，极易引发磁盘 I/O 争用与打字卡顿。
+本扩展在启动时完成内存装载，并在渲染层执行 Dirty-Checking 缓存，**TUI 重绘循环中 0 次调用同步文件读取**。
+
+---
+
+## 工作机制：行为-结果矩阵
+
+```text
+  /beautify （随时调出交互式主题切换器）
+```
+
+| 模式 / 场景 | 你做什么 | 插件幕后动作 | 底栏最终呈现 | 适用场景 |
+| :--- | :--- | :--- | :--- | :--- |
+| **`stream`** *(默认极简)* | 正常安装各扩展 | 剥离冗长包名与杂乱符号，规范徽章 | `plan ❯ ◆ 3  mcp ❯ ● ready  anchor ❯ ⌖ 3` | 干净极简，日常主力推荐 |
+| **窄分屏自适应** | tmux 分屏宽度 `< 80` 列 | 识别活跃状态，自动折叠就绪状态 | `toolflow ❯ ⌬ running (2/5)  (+3 idle)` | 多分屏防挤压折行 |
+| **`full-footer`** *(全景)* | 开启全量底栏模式 | 接管两行底栏，第一行系统遥测，第二行徽章 | 行 1: 目录/Git/Token/模型；行 2: 规范徽章 | 极客全景视窗 |
+| **`off`** *(彻底还原)* | 运行 `/beautify off` | 物理删除 `settings.json` 中的 `beautifier` 键 | 100% 还原原生底栏，零残留 | 随时无痛试用与反悔 |
+
+---
+
+## 预设画廊与视觉风格
 
 键入 `/beautify` 即可实时交互切换不同风格：
 
 ```text
-  1. stream（默认极简流式）
+  1. stream (默认极简流式)
      chrome ❯ ● ready    toolflow ❯ ⌬ 2/5    anchor ❯ ⌖ 3    plan ❯ ◆ 1
 
-  2. powerline（尖角分界与几何徽记）
+  2. powerline (尖角分界与几何徽记)
      chrome ‹◆ ready›    toolflow ‹◈ 2/5›    anchor ‹⌖ 3›    plan ‹◆ 1›
 
-  3. matrix（点阵微框与星标）
+  3. matrix (点阵微框与星标)
      chrome ⦗✦ ready⦘    toolflow ⦗✧ 2/5⦘    anchor ⦗⌖ 3⦘    plan ⦗✦ 1⦘
 
-  4. glow（高对比度反色胶囊）
+  4. glow (高对比度反色胶囊)
      chrome [ ● ready ]  toolflow [ ⌬ 2/5 ]  anchor [ ⌖ 3 ]  plan [ ◆ 1 ]
 
-  5. minimal（10 列等宽排版流）
+  5. minimal (10 列等宽排版流)
      chrome     ❯ ● ready    toolflow   ❯ ⌬ 2/5    anchor     ❯ ⌖ 3
 
-  6. custom（与 AI 结对定制）
-     通过自然语言描述，由 Coding Agent 生成专属的分隔符、边框字符与状态图腾。
+  6. custom (与 AI 结对定制)
+     用自然语言描述审美需求，由 Agent 提供 3 套 ASCII 视觉样机并自动入库。
 ```
 
 ---
 
-## 核心架构与物理机制
+## 核心特性与工程机制
 
-### 1. 双层格式化作用域（Dual-Scope Architecture）
-通过 `/beautify` 可以选择两种控制作用域：
-* **`status-only`（默认推荐模式）**：仅规范化插件的 `ctx.ui.setStatus` 徽章。完整保留 Pi 原生的 Git 分支、工作目录、上下文使用百分比、Token 遥测数据（`↑1.2k ↓3.4k R8.9k`）以及深度思考指示（`• high`）。
-* **`full-footer`（深度一体化底栏）**：重构整个终端底栏为两行式布局：
-  * **第一行**：左侧展示项目目录与 Git 分支，右侧展示上下文缓存命中率、Token 消耗、活跃模型及思考级别。
-  * **第二行**：自适应排列全部插件状态徽章。
-
-### 2. 窄屏自适应折叠守卫（< 80 列分屏优化）
-当终端被水平分割导致宽度紧缩时，排版求解器将插件状态分为两级优先级：
-* **高优先级（活跃/报警/错误）**：包含 `running`、`working`、`starting`、`error`、`failed`、`pause` 的徽章始终完整呈现。
-* **低优先级（闲置/就绪/完成）**：当整行宽度超出物理列宽时，就绪与闲置状态自动折叠为紧凑的计数摘要：
-  ```text
-  toolflow ❯ ⌬ running (2/5)    plan ❯ ▲ error    (+3 idle)
-  ```
-
-### 3. 插件语义映射与动态微微旋转器（Micro-Spinners）
-引擎自动剥离包体命名冗余后缀（`-extension`、`-plugin`、`-adapter`、`-slash-text`），为常见生态工具建立语义符号映射：
-* `plannotator` ➔ `plan`（重点符 `◆`）
-* `pi-mcp-adapter` ➔ `mcp`（圆点符 `●`）
-* `pi-control-chrome` ➔ `chrome`（圆点符 `●`）
-* `pi-anchor` ➔ `anchor`（锚点符 `⌖`）
-* `toolflow` ➔ `toolflow`（流向符 `⌬`）
-* `pi-lingual` ➔ `lingual`（双向符 `⇄`）
-* 执行中的任务（包含 `running`、`working`、`...`）自动激活 300ms 动态旋转器（`◐`、`◓`、`◑`、`◒`）。
-
-### 4. 零代码 AI 结对定制（`/beautify custom`）
-想要契合特定审美的终端底栏：
-1. 运行 `/beautify` 并选择 `custom`；
-2. 输入自然语言风格描述（例如：“北欧冷色调点阵”、“复古绿色终端微框”）；
-3. 扩展自动构造结构化 Prompt 发送给当前 Coding Agent；
-4. Agent 通过 `ask_user_question` 提供 **3 套 ASCII 视觉样机**供选择，并将选中的样式写入 `./.pi/settings.json`。
+- 🛡️ **非侵入式双层作用域**：
+  * `status-only`（默认推荐）：仅规范化插件徽章，100% 完整保留 Pi 原生 Git 分支、Token 遥测与思考级别；
+  * `full-footer`（深度一体化）：重构底栏为两行式布局，第一行系统状态，第二行插件状态。
+- 📐 **Unicode UAX #11 与代理对安全**：内置独立字符宽度扫描器，精确计算东亚宽字符（2 列）、ASCII（1 列）与 ANSI 控制序列（0 列），彻底消除光标抖动与排版错位。
+- ⚡ **渲染循环 0 磁盘 I/O**：会话启动时将配置加载至内存，重绘循环 0 磁盘读取；对相同状态执行 Dirty-Checking 缓存，避免重复构建字符串。
+- ◐ **动态微型旋转器**：执行中的任务（`running`、`working`）自动触发 300ms 动态旋转器（`◐`、`◓`、`◑`、`◒`）。
+- 🗑️ **零残留物理还原（Zero-Trace Revert）**：选择 `off` 时，不仅即时还原所有插件原生状态，还会从 `settings.json` 中物理删除 `beautifier` 键名，绝不留置废弃配置。
 
 ---
 
-## 底层硬核工程保证
+## 常用命令与配置
 
-### Unicode UAX #11 视觉列宽与代理对安全
-普通基于 `string.length` 的字符计数会在处理中文、日文平假名、Emoji 或代理对时失准。`pi-tui-status-beautifier` 内置独立的 `codePointAt(0)` 扫描器：
-* 精确测量东亚宽字符（2 列）、半角 ASCII（1 列）与零宽控制序列（0 列）；
-* 过滤零宽连接符（ZWJ `0x200d`）、Emoji 变体选择符（`0xfe0f`, `0xfe0e`）与组合附加符号（`0x0300..0x036f`）；
-* 截断长名称时采用 `sliceToVisualWidth`，避免在多字节代理对中间切断字符导致乱码。
+### 交互命令
+```bash
+/beautify                # 打开交互式主题选择菜单
+/beautify stream         # 直接切换为 stream 风格
+/beautify off            # 彻底关闭并清理配置
+```
 
-### 渲染循环 0 磁盘 I/O 与 Dirty-Checking 内存缓存
-* **单次配置装载**：会话启动时将配置加载至内存，后续 TUI 高频渲染循环中 **0 次调用同步文件读取（`fs.readFileSync`）**；
-* **徽章状态 Dirty-Checking**：按 `${key}:${currentStyle}` 缓存徽章渲染结果。如果扩展推送相同状态，跳过字符串构造与重绘；
-* **原子化配置持久化**：使用临时文件重命名（`writeFileSync(temp)` + `renameSync(temp, target)`）写入配置，避免中断写入造成文件损坏。
-
-### 零残留物理还原（`off`）
-选择 `off` 时，立即还原所有插件的原始状态字符串，卸载 Footer 钩子，并从 `settings.json` 中物理删除 `beautifier` 键名，不留置冗余配置项。
-
----
-
-## 配置规范
-
-配置项保存在 `./.pi/settings.json`（项目级，优先级更高）或 `~/.pi/agent/settings.json`（全局）：
+### 配置文件规范
+配置自动持久化在 `./.pi/settings.json`（项目级）或 `~/.pi/agent/settings.json`（全局）：
 
 ```json
 {
@@ -130,77 +131,34 @@
 }
 ```
 
-### 自定义样式 Schema（`style: "custom"`）
-```json
-{
-  "beautifier": {
-    "style": "custom",
-    "fullFooter": false,
-    "custom": {
-      "prefix": "",
-      "suffix": "",
-      "separator": " ❯ ",
-      "brackets": ["⦗", "⦘"],
-      "inverse": false,
-      "padName": false,
-      "glyphs": {
-        "success": "●",
-        "warning": "◌",
-        "error": "▲",
-        "accent": "◆"
-      }
-    }
-  }
-}
-```
+---
+
+## 作者手记
+
+做 `pi-tui-status-beautifier` 的初衷，源于敲代码时的视觉烦躁。
+
+随着装的 Pi 扩展越来越多，终端底栏逐渐变成了一个杂乱的广告牌。每个插件作者都有自己的标点风格、原生 emoji 和字符宽度。一旦进入 tmux 分屏，底栏经常被挤成两行，整块屏幕不断抖动。
+
+市面上有些状态栏插件做法很激进：直接调用 `ctx.ui.setFooter` 把原生底栏整个端掉。结果把最重要的 Token 消耗、缓存命中率、思考级别和 Git 分支全给弄没了，有的甚至在每帧渲染里调用 `readFileSync` 读配置，打字都变钝。
+
+这套扩展遵循三条硬约束：
+1. **绝不吞原生遥测**：只修饰插件徽章，系统状态原汁原味；
+2. **渲染循环 0 磁盘读取**：内存缓存，重复状态直接跳过；
+3. **零残留反悔**：关掉时物理删除配置，不留半个孤儿键。
+
+一个好的状态栏应当是安静、克制、整齐的，在你不需要它的时候近乎隐形。
 
 ---
 
-## 安装与快速上手
+## 质量验证
 
-### 作为 Pi 扩展安装
 ```bash
-# 推荐：直接通过 npm 安装官方包
-pi install npm:pi-tui-status-beautifier
-
-# 或从 GitHub 安装
-pi install git:github.com/3ZEROS12/pi-tui-status-beautifier
-```
-
-### 交互命令
-在任意 Pi 会话中输入 `/beautify` 呼出交互选择向导：
-```text
-/beautify
-```
-
-### 本地开发与单元测试
-```bash
-git clone https://github.com/3ZEROS12/pi-tui-status-beautifier.git
-cd pi-tui-status-beautifier
-npm install
-npm test            # 18/18 单元测试全部通过
-npm run lint        # ESLint 0 警告
+npm test            # 物理单元测试套件 (18/18 全部通过)
+npm run lint        # ESLint 零警告
 ```
 
 ---
 
-## 作者手记 (Author's Note)
-
-写这个插件的最初原因，来自于我日常在终端结对编程时产生的视觉疲劳。
-
-随着安装的 Pi 扩展逐渐变多（`pi-mcp-adapter`、`plannotator`、`toolflow`、`pi-anchor`、`pi-lingual` 等），屏幕底部的状态栏迅速退化成了一片混乱的信息广场。每个插件作者都用着自己随手写的格式：有的带长前缀，有的用方括号，有的放几个大大的 Emoji 表情。在 tmux 分屏或窄窗口下，长文本频频折行撕裂，屏幕不断晃眼抖动。
-
-调研现存的状态栏美化方案时，我发现有些方案过于粗暴：直接调用 `ctx.ui.setFooter` 彻底接管底部，结果把 Pi 原生至关重要的 Token 消耗、缓存读取率、思考级别和 Git 分支等核心指标全部抹掉了。更有甚者，在每一次终端高频重绘中同步读取磁盘配置文件，导致打字敲键盘出现可感知的掉帧卡顿。
-
-我为这个格式化引擎确立了三条硬性约束：
-1. 非侵入式兜底：绝不劫持宿主平台的关键指标，只规范扩展发出的状态徽标；
-2. 零重绘磁盘 I/O：配置内存常驻与脏检查，绝不在渲染循环中读盘；
-3. 彻底的零残留：选择关闭时物理删除配置块（`delete config.beautifier`），不留任何孤立配置杂质。
-
-一个好的状态栏应当安静、规整，在不需要它的时候退居幕后，只在需要的一瞥间提供清晰的反馈。
-
----
-
-## 许可证
+## 开源协议
 
 MIT © [Jason](https://github.com/3ZEROS12)
