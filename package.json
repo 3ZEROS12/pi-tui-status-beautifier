@@ -1,7 +1,7 @@
 {
   "name": "pi-tui-status-beautifier",
-  "version": "1.7.3",
-  "description": "Minimalist status bar formatter & AI-customizable layout engine for Pi TUI.",
+  "version": "1.7.4",
+  "description": "Clean up your Pi terminal status bar — formats extension badges with crisp presets (Stream, Powerline, Matrix, Glow), folds idle items on narrow screens, and adds live spinners.",
   "main": "extensions/tui-status-beautifier.ts",
   "keywords": [
     "pi-package"
