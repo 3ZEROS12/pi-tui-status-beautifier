@@ -27,6 +27,7 @@
     "extensions/tui-status-beautifier.ts",
     "assets",
     "README.md",
+    "README_ja.md",
     "README_zh.md",
     "CHANGELOG.md",
     "LICENSE"
