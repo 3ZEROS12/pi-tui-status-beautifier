@@ -93,11 +93,11 @@ const lastRenderedStatus = new Map<string, string | undefined>();
 
 // Safe, non-backtracking ReDoS-mitigated ANSI escape sequence matcher (supporting ; and :)
 const ANSI_STRIP_REGEX =
-  /[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g;
+  /[\u001B\u009B][\[\]\\()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?\u0007)|(?:(?:\d{1,4}(?:[:;]\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g;
 
 // Hoisted regex patterns to prevent instantiation and GC overhead in the render hot-path
 const STATUS_PATTERN =
-  /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋⌬★✦◇»«‹›⦗⦘]|[0-9]+\/[0-9]+|active|online|offline|running|paused|error|success|connected|disconnected|ready|idle|ok|done|failed|waiting|stopped|listening|cleanup|starting/i;
+  /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋⌬★✦◇»«‹›⦗⦘]|[0-9]+\/[0-9]+|\b(?:active|online|offline|running|paused|error|success|connected|disconnected|ready|idle|ok|done|failed|waiting|stopped|listening|cleanup|starting)\b/i;
 const NAME_SUFFIX_PATTERN = /-(extension|plugin|assistant|adapter|slash-text|slash|text|widget)$/gi;
 const FRACTION_PATTERN = /(\d+\/\d+|\d+%\s*)/;
 const PARENTHESES_PATTERN = /\((\d+)\)/;
@@ -108,28 +108,42 @@ let currentStyle = "minimal";
 let fullFooterEnabled = false;
 let customStyleConfig: CustomStyleConfig | undefined;
 
+function isTestEnvironment(): boolean {
+  return (
+    process.env.NODE_ENV === "test" ||
+    process.env.VITEST !== undefined ||
+    process.env.NODE_TEST_CONTEXT !== undefined ||
+    process.execArgv.some((a) => a.includes("test") || a.includes("vitest")) ||
+    process.env.npm_lifecycle_event === "test"
+  );
+}
+
 /**
  * Resolves configuration hierarchically:
  * Project-level `./.pi/settings.json` takes priority over global `~/.pi/agent/settings.json`
  */
-export function loadConfig(cwd: string = process.cwd()): {
+export function loadConfig(cwd?: string): {
   style: string;
   fullFooter: boolean;
   custom?: CustomStyleConfig;
   targetSettingsPath: string;
 } {
+  const effectiveCwd = cwd || process.cwd();
   const home = process.env.HOME || process.env.USERPROFILE || "";
   const globalPath = path.join(home, ".pi/agent/settings.json");
-  const localPath = path.join(cwd, ".pi/settings.json");
+  const localPath = path.join(effectiveCwd, ".pi/settings.json");
 
   let resolvedStyle = "minimal";
   let resolvedFullFooter = false;
   let resolvedCustom: CustomStyleConfig | undefined;
   let hasLocalConfig = false;
 
+  // Multi-Probe Test Isolation: skip reading real global ~/.pi/agent/settings.json in test runner unless cwd explicitly provided
+  const skipGlobalInTest = isTestEnvironment() && cwd === undefined;
+
   // 1. Read global settings
   try {
-    if (fs.existsSync(globalPath)) {
+    if (!skipGlobalInTest && fs.existsSync(globalPath)) {
       const data = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
       if (data.beautifier) {
         if (typeof data.beautifier.style === "string") {
@@ -275,7 +289,6 @@ export function beautifyStatus(
       valLower.includes("warning") ||
       valLower.includes("pause") ||
       valLower.includes("planning") ||
-      valLower.includes("plan") ||
       valLower.includes("waiting") ||
       valLower.includes("cleanup")
     ) {
@@ -291,13 +304,14 @@ export function beautifyStatus(
       valLower.includes("ok") ||
       valLower.includes("done")
     ) {
-      state = "success";
+      state = name === "plan" ? "accent" : "success";
     } else {
       state = name === "plan" ? "accent" : "success";
     }
 
     // 4. Determine state glyph & indicator
     const glyphMap = preset.glyphs || {};
+    const isEcosystemGlyph = name === "anchor" || name === "toolflow" || name === "lingual";
     let defaultGlyph =
       name === "anchor"
         ? "⌖"
@@ -314,18 +328,21 @@ export function beautifyStatus(
                   : "●";
 
     // Dynamic micro-spinner for active in-progress / running states (running, working, starting, waiting)
-    if (
+    const isSpinning =
       valLower.includes("running") ||
       valLower.includes("working") ||
       valLower.includes("starting") ||
       valLower.includes("waiting") ||
-      valLower.includes("...")
-    ) {
+      valLower.includes("...");
+    if (isSpinning) {
       const spinnerChar = SPINNERS[Math.floor(Date.now() / 300) % SPINNERS.length];
       defaultGlyph = spinnerChar;
     }
 
-    let glyph = glyphMap[state] || defaultGlyph;
+    // Preserve ecosystem glyphs (⌖, ⌬, ⇄) and active spinners across all preset themes unless overridden in custom style
+    const glyph = (isSpinning || (isEcosystemGlyph && style !== "custom"))
+      ? defaultGlyph
+      : (glyphMap[state] || defaultGlyph);
 
     const hasThemeFg = theme && typeof theme.fg === "function";
     const coloredGlyph = hasThemeFg ? theme.fg(state, glyph) : glyph;
@@ -563,9 +580,13 @@ export function renderBeautifiedFooter(
   let input = 0, output = 0, cacheRead = 0, cacheWrite = 0, cost = 0;
   let latestCacheHitRate: number | undefined;
 
-  if (ctx?.sessionManager?.getEntries) {
+  const entriesSource =
+    ctx?.sessionManager?.getEntries?.() ||
+    ctx?.sessionManager?.getBranch?.();
+
+  if (entriesSource) {
     try {
-      for (const entry of ctx.sessionManager.getEntries()) {
+      for (const entry of entriesSource) {
         if (entry.type === "usage" && entry.usage) {
           input += entry.usage.input || 0;
           output += entry.usage.output || 0;
@@ -845,16 +866,16 @@ export default function (pi: ExtensionAPI) {
       // Write atomically to settings.json
       const { targetSettingsPath } = loadConfig(ctx.cwd || process.cwd());
       try {
-        if (fs.existsSync(targetSettingsPath)) {
-          const data = fs.readFileSync(targetSettingsPath, "utf-8");
-          const config = JSON.parse(data);
-          if (!config.beautifier) config.beautifier = {};
-          config.beautifier.style = styleKey;
-          config.beautifier.fullFooter = isFullFooter;
-          const tempSettings = `${targetSettingsPath}.tmp.${process.pid}.${Date.now()}`;
-          fs.writeFileSync(tempSettings, JSON.stringify(config, null, 2), "utf-8");
-          fs.renameSync(tempSettings, targetSettingsPath);
-        }
+        fs.mkdirSync(path.dirname(targetSettingsPath), { recursive: true });
+        const config = fs.existsSync(targetSettingsPath)
+          ? JSON.parse(fs.readFileSync(targetSettingsPath, "utf-8"))
+          : {};
+        if (!config.beautifier) config.beautifier = {};
+        config.beautifier.style = styleKey;
+        config.beautifier.fullFooter = isFullFooter;
+        const tempSettings = `${targetSettingsPath}.tmp.${process.pid}.${Date.now()}`;
+        fs.writeFileSync(tempSettings, JSON.stringify(config, null, 2), "utf-8");
+        fs.renameSync(tempSettings, targetSettingsPath);
       } catch (_e) {
         // Silently ignore disk write errors
       }
@@ -887,32 +908,6 @@ export default function (pi: ExtensionAPI) {
         `TUI status style changed to: ${styleKey} (${isFullFooter ? "Full-Footer" : "Status Only"})`,
         "info"
       );
-
-      if ((VALID_STYLES as readonly string[]).includes(styleKey)) {
-        currentStyle = styleKey;
-        lastRenderedStatus.clear();
-        ctx.ui.notify(`TUI status style changed to: ${styleKey}`, "info");
-
-        const { targetSettingsPath } = loadConfig(ctx.cwd || process.cwd());
-
-        try {
-          if (fs.existsSync(targetSettingsPath)) {
-            const data = fs.readFileSync(targetSettingsPath, "utf-8");
-            const config = JSON.parse(data);
-            if (!config.beautifier) config.beautifier = {};
-            config.beautifier.style = styleKey;
-            const tempSettings = `${targetSettingsPath}.tmp.${process.pid}.${Date.now()}`;
-            fs.writeFileSync(tempSettings, JSON.stringify(config, null, 2), "utf-8");
-            fs.renameSync(tempSettings, targetSettingsPath);
-          }
-        } catch (_e) {
-          // Silently ignore disk write errors
-        }
-
-        for (const [key, val] of originalStatuses.entries()) {
-          ctx.ui.setStatus(key, val);
-        }
-      }
     },
   });
 }

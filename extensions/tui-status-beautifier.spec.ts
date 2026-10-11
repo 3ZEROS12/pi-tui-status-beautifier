@@ -213,11 +213,15 @@ describe("TUI Status Beautifier Tests", () => {
   });
 
   describe("Adaptive Badge Folding & Symbology", () => {
-    it("assigns ⌖ symbol to anchor and ⌬ symbol to toolflow", () => {
-      const anchorOut = beautifyStatus("anchor", "ready", mockTheme, "stream") || "";
-      const toolflowOut = beautifyStatus("toolflow", "ready", mockTheme, "stream") || "";
-      expect(anchorOut).toContain("⌖");
-      expect(toolflowOut).toContain("⌬");
+    it("assigns ⌖ symbol to anchor and ⌬ symbol to toolflow across stream, powerline, and matrix presets", () => {
+      for (const preset of ["stream", "powerline", "matrix", "glass"]) {
+        const anchorOut = beautifyStatus("anchor", "ready", mockTheme, preset) || "";
+        const toolflowOut = beautifyStatus("toolflow", "ready", mockTheme, preset) || "";
+        const lingualOut = beautifyStatus("lingual", "ready", mockTheme, preset) || "";
+        expect(anchorOut).toContain("⌖");
+        expect(toolflowOut).toContain("⌬");
+        expect(lingualOut).toContain("⇄");
+      }
     });
 
     it("folds idle badges into (+N idle) on narrow terminal widths", () => {
