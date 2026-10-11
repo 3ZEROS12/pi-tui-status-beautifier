@@ -12,6 +12,10 @@
 
 [English](./README.md) | **简体中文**
 
+<p align="center">
+  <img src="assets/hero-en.svg" alt="pi-tui-status-beautifier 状态栏预设对比" width="820">
+</p>
+
 ```text
   ┌─ 原生底栏（长短不一、缺乏统一规范） ───────────────────────────────────────────────────────────────┐
   │  plannotator: 🟢 3 tasks    pi-mcp-adapter: [connected]    toolflow: active (2/5)    anchor: 3 items │

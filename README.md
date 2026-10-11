@@ -12,6 +12,10 @@ Clean up fragmented extension status strings. Enjoy adaptive narrow-terminal fol
 
 **English** | [简体中文](./README_zh.md)
 
+<p align="center">
+  <img src="assets/hero-en.svg" alt="pi-tui-status-beautifier Presets" width="820">
+</p>
+
 ```text
   ┌─ Native Status Bar (Fragmented & Cluttered) ────────────────────────────────────────────────────────┐
   │  plannotator: 🟢 3 tasks    pi-mcp-adapter: [connected]    toolflow: active (2/5)    anchor: 3 items │

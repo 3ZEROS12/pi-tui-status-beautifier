@@ -1,25 +1,39 @@
 {
   "name": "pi-tui-status-beautifier",
-  "version": "1.7.4",
+  "version": "1.7.5",
   "description": "Clean up your Pi terminal status bar — formats extension badges with crisp presets (Stream, Powerline, Matrix, Glow), folds idle items on narrow screens, and adds live spinners.",
   "main": "extensions/tui-status-beautifier.ts",
   "keywords": [
-    "pi-package"
+    "pi-package",
+    "pi-extension",
+    "status-bar",
+    "statusbar",
+    "tui",
+    "theme",
+    "powerline",
+    "beautifier",
+    "footer",
+    "hud",
+    "terminal-ui",
+    "coding-agent"
   ],
   "pi": {
     "extensions": [
       "./extensions/tui-status-beautifier.ts"
-    ]
+    ],
+    "image": "https://raw.githubusercontent.com/3ZEROS12/pi-tui-status-beautifier/master/assets/hero-en.svg"
   },
   "files": [
     "extensions/tui-status-beautifier.ts",
+    "assets",
     "README.md",
+    "README_zh.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/3ZEROS12/pi-tui-status-beautifier.git"
+    "url": "git+https://github.com/3ZEROS12/pi-tui-status-beautifier.git"
   },
   "homepage": "https://github.com/3ZEROS12/pi-tui-status-beautifier#readme",
   "bugs": {

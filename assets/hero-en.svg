@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 430" width="840" height="430">
+  <defs>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.45" />
+    </filter>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2b3339" />
+      <stop offset="100%" stop-color="#232a2e" />
+    </linearGradient>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="20" y="15" width="800" height="390" rx="12" fill="#1e2326" stroke="#343f44" stroke-width="1.2" />
+    <path d="M 20,27 A 12,12 0 0,1 32,15 L 808,15 A 12,12 0 0,1 820,27 L 820,52 L 20,52 Z" fill="url(#headerGrad)" stroke="#343f44" stroke-width="1" />
+    <line x1="20" y1="52" x2="820" y2="52" stroke="#2d353b" stroke-width="1" />
+    <circle cx="42" cy="33.5" r="5.5" fill="#e67e80" />
+    <circle cx="60" cy="33.5" r="5.5" fill="#dbbc7f" />
+    <circle cx="78" cy="33.5" r="5.5" fill="#a7c080" />
+    <text x="420" y="38" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="500" fill="#859289">
+      pi-tui-status-beautifier · 6 Crisp Status Bar Presets
+    </text>
+  </g>
+
+  <g font-family="'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace" font-size="13" xml:space="preserve">
+    <text x="45" y="88" fill="#859289">Before (Raw unformatted extension badges):</text>
+    <rect x="45" y="98" width="750" height="36" rx="6" fill="#292224" stroke="#543a3d" stroke-width="1" />
+    <text x="60" y="121" fill="#e67e80">[anchor: 3 active] [toolflow: active stage 2] [lingual: zh-&gt;en learn] [subagent: 2 running...]</text>
+
+    <text x="45" y="164" fill="#a7c080" font-weight="bold">After (Formatted with `/beautify` presets + dynamic width folding):</text>
+
+    <rect x="45" y="178" width="750" height="42" rx="6" fill="#232a2e" stroke="#3a464c" stroke-width="1" />
+    <text x="60" y="204">
+      <tspan fill="#7a8478">1. Stream    </tspan>
+      <tspan fill="#a7c080" font-weight="bold">⌖ 3</tspan>
+      <tspan fill="#56635f"> · </tspan>
+      <tspan fill="#7fbbb3" font-weight="bold">⌬ impl</tspan>
+      <tspan fill="#56635f"> · </tspan>
+      <tspan fill="#d699b6" font-weight="bold">⇄ zh⇄en</tspan>
+      <tspan fill="#56635f"> · </tspan>
+      <tspan fill="#dbbc7f">⠋ 2 agents</tspan>
+    </text>
+
+    <rect x="45" y="232" width="750" height="42" rx="6" fill="#232a2e" stroke="#3a464c" stroke-width="1" />
+    <text x="60" y="258">
+      <tspan fill="#7a8478">2. Powerline </tspan>
+      <tspan fill="#232a2e" font-weight="bold"> ⌖ 3 </tspan>
+      <tspan fill="#a7c080"></tspan>
+      <tspan fill="#7fbbb3" font-weight="bold"> ⌬ impl </tspan>
+      <tspan fill="#7fbbb3"></tspan>
+      <tspan fill="#d699b6" font-weight="bold"> ⇄ zh⇄en </tspan>
+      <tspan fill="#d699b6"></tspan>
+      <tspan fill="#dbbc7f"> ⠋ 2 agents </tspan>
+    </text>
+
+    <rect x="45" y="286" width="750" height="42" rx="6" fill="#232a2e" stroke="#3a464c" stroke-width="1" />
+    <text x="60" y="312">
+      <tspan fill="#7a8478">3. Matrix    </tspan>
+      <tspan fill="#a7c080">[⌖:03]</tspan>
+      <tspan fill="#56635f"> </tspan>
+      <tspan fill="#7fbbb3">[⌬:IMPL]</tspan>
+      <tspan fill="#56635f"> </tspan>
+      <tspan fill="#d699b6">[⇄:ZH-EN]</tspan>
+      <tspan fill="#56635f"> </tspan>
+      <tspan fill="#dbbc7f">[⠋:02]</tspan>
+    </text>
+
+    <text x="45" y="362" fill="#859289">
+      <tspan>Run </tspan>
+      <tspan fill="#7fbbb3" font-weight="bold">`/beautify`</tspan>
+      <tspan> to switch presets or </tspan>
+      <tspan fill="#7fbbb3" font-weight="bold">`/beautify:ai`</tspan>
+      <tspan> to design your own bar in plain language.</tspan>
+    </text>
+  </g>
+</svg>
