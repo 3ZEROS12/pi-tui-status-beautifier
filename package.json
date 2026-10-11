@@ -1,6 +1,6 @@
 {
   "name": "pi-tui-status-beautifier",
-  "version": "1.7.5",
+  "version": "1.7.6",
   "description": "Clean up your Pi terminal status bar — formats extension badges with crisp presets (Stream, Powerline, Matrix, Glow), folds idle items on narrow screens, and adds live spinners.",
   "main": "extensions/tui-status-beautifier.ts",
   "keywords": [
