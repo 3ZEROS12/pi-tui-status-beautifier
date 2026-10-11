@@ -199,6 +199,37 @@ export function loadConfig(cwd?: string): {
 
 loadConfig();
 
+function sanitizeCustomConfig(raw: any): CustomStyleConfig | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const clampStr = (v: unknown, maxLen = 16): string | undefined =>
+    typeof v === "string" ? v.slice(0, maxLen) : undefined;
+  const brackets =
+    Array.isArray(raw.brackets) &&
+    raw.brackets.length === 2 &&
+    typeof raw.brackets[0] === "string" &&
+    typeof raw.brackets[1] === "string"
+      ? ([raw.brackets[0].slice(0, 4), raw.brackets[1].slice(0, 4)] as [string, string])
+      : undefined;
+  const rawGlyphs = raw.glyphs && typeof raw.glyphs === "object" && !Array.isArray(raw.glyphs) ? raw.glyphs : undefined;
+  const glyphs = rawGlyphs
+    ? {
+        success: clampStr(rawGlyphs.success, 4),
+        warning: clampStr(rawGlyphs.warning, 4),
+        error: clampStr(rawGlyphs.error, 4),
+        accent: clampStr(rawGlyphs.accent, 4),
+      }
+    : undefined;
+  return {
+    prefix: clampStr(raw.prefix, 16),
+    suffix: clampStr(raw.suffix, 16),
+    separator: clampStr(raw.separator, 12),
+    brackets,
+    inverse: typeof raw.inverse === "boolean" ? raw.inverse : undefined,
+    padName: typeof raw.padName === "boolean" ? raw.padName : undefined,
+    glyphs,
+  };
+}
+
 // Clean status text and map state and details
 export function beautifyStatus(
   key: string,
@@ -211,13 +242,14 @@ export function beautifyStatus(
   if (style === "off" || OFF_STYLES.has((style || "").toLowerCase().trim())) return originalVal;
 
   try {
-    const hasAnsi = originalVal.includes("\u001B") || originalVal.includes("\u009B");
-    const cleanVal = hasAnsi ? originalVal.replace(ANSI_STRIP_REGEX, "").trim() : originalVal.trim();
+    const boundedVal = originalVal.length > 512 ? originalVal.slice(0, 512) : originalVal;
+    const hasAnsi = boundedVal.includes("\u001B") || boundedVal.includes("\u009B");
+    const cleanVal = hasAnsi ? boundedVal.replace(ANSI_STRIP_REGEX, "").trim() : boundedVal.trim();
 
     if (cleanVal === "") return "";
 
     if (!STATUS_PATTERN.test(cleanVal)) {
-      return originalVal;
+      return originalVal.length > 64 ? sliceToVisualWidth(cleanVal, 32) : originalVal;
     }
 
     // 1. Get display name (compact natural width by default to save precious terminal columns)
@@ -385,6 +417,14 @@ export function beautifyStatus(
   }
 }
 
+const isZeroWidthCode = (code: number) =>
+  code === 0x200d ||
+  code === 0xfe0f ||
+  code === 0xfe0e ||
+  (code >= 0x0300 && code <= 0x036f) ||
+  (code >= 0x1f3fb && code <= 0x1f3ff) ||
+  (code >= 0x200b && code <= 0x200f);
+
 /**
  * Calculates the visual column cell width of a string, taking into account
  * full-width Unicode characters, East Asian ideographs, Kana, Hangul, emojis, and zero-width joiners.
@@ -393,17 +433,20 @@ export function getStringWidth(str: string): number {
   if (!str) return 0;
   const clean = str.replace(ANSI_STRIP_REGEX, "");
   let width = 0;
+  let afterZwj = false;
 
   for (const char of clean) {
     const code = char.codePointAt(0) || 0;
 
-    if (
-      code === 0x200d ||
-      code === 0xfe0f ||
-      code === 0xfe0e ||
-      (code >= 0x0300 && code <= 0x036f) ||
-      (code >= 0x200b && code <= 0x200f)
-    ) {
+    if (code === 0x200d) {
+      afterZwj = true;
+      continue;
+    }
+    if (isZeroWidthCode(code)) {
+      continue;
+    }
+    if (afterZwj) {
+      afterZwj = false;
       continue;
     }
 
@@ -451,21 +494,27 @@ export function isFullWidth(code: number): boolean {
  * Slices a string to a maximum visual cell width without cutting surrogate pairs in half.
  */
 export function sliceToVisualWidth(str: string, maxWidth: number): string {
+  if (!str || maxWidth <= 0) return "";
   let width = 0;
   let sliced = "";
+  let pendingZwj = false;
 
   for (const char of str) {
     const code = char.codePointAt(0) || 0;
-    const charWidth =
-      code === 0x200d ||
-      code === 0xfe0f ||
-      code === 0xfe0e ||
-      (code >= 0x0300 && code <= 0x036f) ||
-      (code >= 0x200b && code <= 0x200f)
-        ? 0
-        : isFullWidth(code)
-          ? 2
-          : 1;
+    if (code === 0x200d) {
+      if (sliced.length > 0) pendingZwj = true;
+      continue;
+    }
+    if (isZeroWidthCode(code)) {
+      if (sliced.length > 0) sliced += char;
+      continue;
+    }
+    if (pendingZwj) {
+      sliced += "\u200d" + char;
+      pendingZwj = false;
+      continue;
+    }
+    const charWidth = isFullWidth(code) ? 2 : 1;
 
     if (width + charWidth > maxWidth) {
       break;
@@ -556,11 +605,11 @@ export function renderBeautifiedFooter(
 ): string[] {
   const preset =
     style === "custom"
-      ? (customCfg || customStyleConfig || {})
+      ? (sanitizeCustomConfig(customCfg) || sanitizeCustomConfig(customStyleConfig) || {})
       : (BUILTIN_PRESETS[style] || BUILTIN_PRESETS.minimal);
 
   const hasThemeFg = theme && typeof theme.fg === "function";
-  const sep = preset.separator || (preset.brackets ? " " : " ❯ ");
+  const sep = typeof preset.separator === "string" && preset.separator ? preset.separator : (preset.brackets ? " " : " ❯ ");
   const styledSep =
     hasThemeFg && (sep.includes("│") || sep.includes("⁝") || sep.includes("❯") || sep.includes("»"))
       ? theme.fg("dim", sep)
