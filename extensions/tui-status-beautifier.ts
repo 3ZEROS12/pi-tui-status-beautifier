@@ -857,7 +857,7 @@ export default function (pi: ExtensionAPI) {
         if (typeof (ctx.ui as any).input === "function") {
           userDesire = await (ctx.ui as any).input(
             "Describe your custom status bar style:",
-            "e.g. 赛博复古点阵 / Minimal dots / Soft warm pastel / Powerline diamonds"
+            "e.g. Cyberpunk dot matrix / Minimal dots / Soft warm pastel / Powerline diamonds"
           );
         }
 
