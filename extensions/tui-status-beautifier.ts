@@ -676,14 +676,26 @@ export function renderBeautifiedFooter(
   const contextUsage = ctx?.getContextUsage?.();
   const contextWindow = contextUsage?.contextWindow || ctx?.model?.contextWindow || 0;
   if (contextUsage?.percent !== undefined && contextUsage?.percent !== null) {
-    statParts.push(`${contextUsage.percent.toFixed(1)}%/${fmt(contextWindow)} (auto)`);
+    const pct = contextUsage.percent;
+    const pctColor = pct > 85 ? "error" : pct > 70 ? "warning" : "dim";
+    const pctStr = `${pct.toFixed(0)}%`;
+    const styledPct = hasThemeFg ? theme.fg(pctColor, pctStr) : pctStr;
+    statParts.push(`${styledPct}/${fmt(contextWindow)}`);
   }
 
   const tokenStr = statParts.join(" ");
   const styledTokens = tokenStr ? (hasThemeFg ? theme.fg("dim", tokenStr) : tokenStr) : "";
 
-  // Thinking level
-  const thinking = ctx?.thinkingLevel && ctx.thinkingLevel !== "off" ? ` • ${ctx.thinkingLevel}` : "";
+  // Thinking level with kinetic glyphs (🧠 max/high, 💭 med, ⚡ low/minimal)
+  const thinkingGlyph =
+    ctx?.thinkingLevel === "max" || ctx?.thinkingLevel === "high"
+      ? "🧠"
+      : ctx?.thinkingLevel === "medium"
+        ? "💭"
+        : ctx?.thinkingLevel === "low" || ctx?.thinkingLevel === "minimal"
+          ? "⚡"
+          : "•";
+  const thinking = ctx?.thinkingLevel && ctx.thinkingLevel !== "off" ? ` ${thinkingGlyph} ${ctx.thinkingLevel}` : "";
   const fullModelStr = styledModel ? `${styledModel}${hasThemeFg ? theme.fg("dim", thinking) : thinking}` : "";
 
   // Left & right parts of Line 1
