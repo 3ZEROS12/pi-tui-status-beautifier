@@ -38,6 +38,71 @@ export interface CustomStyleConfig {
 }
 
 const BUILTIN_PRESETS: Record<string, CustomStyleConfig> = {
+  // Claude / Anthropic Style: Warm, organic, serene, high-signal dot markers
+  claude: {
+    separator: " · ",
+    glyphs: {
+      success: "●",
+      warning: "○",
+      error: "▲",
+      accent: "◆",
+    },
+  },
+  // OpenAI / GPT Style: Precision slate & emerald geometric tokens
+  openai: {
+    brackets: ["⦋", "⦌"],
+    separator: " ",
+    glyphs: {
+      success: "▪",
+      warning: "▫",
+      error: "✖",
+      accent: "■",
+    },
+  },
+  // Gemini Style: Ethereal celestial sparkle gradients
+  gemini: {
+    brackets: ["✧", "✦"],
+    separator: " ",
+    glyphs: {
+      success: "✦",
+      warning: "✧",
+      error: "✖",
+      accent: "✶",
+    },
+  },
+  // Linear / Raycast Style: High-density keyboard-driven monochrome chevron
+  linear: {
+    separator: " ❯ ",
+    glyphs: {
+      success: "●",
+      warning: "◐",
+      error: "▲",
+      accent: "◆",
+    },
+  },
+  // Tokyo Night Style: Cyberpunk midnight brackets and neon stars
+  tokyo: {
+    brackets: ["⦗", "⦘"],
+    separator: " ",
+    glyphs: {
+      success: "✦",
+      warning: "◍",
+      error: "✖",
+      accent: "✧",
+    },
+  },
+  // Nord Style: Arctic frost chevrons and calm snowstorm symbols
+  nord: {
+    brackets: ["‹", "›"],
+    separator: " ",
+    glyphs: {
+      success: "◆",
+      warning: "◌",
+      error: "▲",
+      accent: "◈",
+    },
+  },
+  // Legacy / Classic presets
   stream: {
     separator: " ❯ ",
   },
@@ -65,7 +130,6 @@ const BUILTIN_PRESETS: Record<string, CustomStyleConfig> = {
     brackets: ["[", "]"],
     inverse: true,
   },
-  // Backward-compatible aliases
   minimal: {
     separator: " ❯ ",
     padName: true,
@@ -82,7 +146,22 @@ const BUILTIN_PRESETS: Record<string, CustomStyleConfig> = {
   },
 };
 
-const VALID_STYLES = ["stream", "powerline", "matrix", "glow", "minimal", "glass", "custom", "off"] as const;
+const VALID_STYLES = [
+  "claude",
+  "openai",
+  "gemini",
+  "linear",
+  "tokyo",
+  "nord",
+  "stream",
+  "powerline",
+  "matrix",
+  "glow",
+  "minimal",
+  "glass",
+  "custom",
+  "off"
+] as const;
 const OFF_STYLES = new Set(["off", "default", "none", "raw", "vanilla", "disable", "disabled"]);
 
 // Store original statuses to allow dynamic redrawing on configuration changes.
@@ -807,27 +886,38 @@ export default function (pi: ExtensionAPI) {
 
   // Dynamic status bar style controller registry
   pi.registerCommand("beautify", {
-    description: "Choose TUI status bar style or customize with AI",
-    handler: async (_args, ctx) => {
+    description: "Choose TUI status bar style or customize with AI (/beautify [claude|openai|gemini|linear|tokyo|nord|stream|powerline|glow|off])",
+    handler: async (args, ctx) => {
       if (!ctx.hasUI || !ctx.ui) {
         return;
       }
 
-      // Stage 1: Select Style / Theme
-      const styleOptions = [
-        "stream    - Clean chevron stream (e.g. name ❯ ● ready)",
-        "powerline - Angled brackets & diamonds (e.g. name ‹◆ ready›)",
-        "matrix    - Dot-matrix brackets & stars (e.g. name ⦗✦ ready⦘)",
-        "glow      - High-contrast inverse pill (e.g. name [ ● ready ])",
-        "custom    - Describe your custom aesthetic to AI",
-        "off       - Revert to native Pi status bar & clean settings",
-      ];
+      const rawInput = (args || "").trim().toLowerCase();
+      let styleKey: string | undefined;
 
-      const choice = await ctx.ui.select(`Choose status bar style (Current: ${currentStyle}):`, styleOptions);
+      if (rawInput && VALID_STYLES.includes(rawInput as any)) {
+        styleKey = rawInput;
+      } else {
+        // Stage 1: Select Style / Theme
+        const styleOptions = [
+          "claude    - Anthropic warm minimalist dots (e.g. name · ● ready)",
+          "openai    - GPT slate emerald geometric tokens (e.g. name ⦋▪ ready⦌)",
+          "gemini    - Google celestial sparkle gradients (e.g. name ✧✦ ready)",
+          "linear    - Linear / Raycast precision chevrons (e.g. name ❯ ● ready)",
+          "tokyo     - Tokyo Night cyberpunk brackets & stars (e.g. name ⦗✦ ready⦘)",
+          "nord      - Nordic arctic frost chevrons (e.g. name ‹◆ ready›)",
+          "stream    - Clean stream chevron (e.g. name ❯ ● ready)",
+          "powerline - Angled brackets & diamonds (e.g. name ‹◆ ready›)",
+          "matrix    - Dot-matrix brackets & stars (e.g. name ⦗✦ ready⦘)",
+          "glow      - High-contrast inverse pill (e.g. name [ ● ready ])",
+          "custom    - Describe your custom aesthetic to AI",
+          "off       - Revert to native Pi status bar & clean settings",
+        ];
 
-      if (!choice) return;
-
-      const styleKey = choice.split(" ")[0].trim();
+        const choice = await ctx.ui.select(`Choose status bar style (Current: ${currentStyle}):`, styleOptions);
+        if (!choice) return;
+        styleKey = choice.split(" ")[0].trim();
+      }
 
       // Zero-trace physical cleanup & revert
       if (styleKey === "off") {

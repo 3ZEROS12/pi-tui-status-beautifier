@@ -77,6 +77,50 @@ describe("TUI Status Beautifier Tests", () => {
       expect(output).toContain("●");
     });
 
+    it("should render claude style (Anthropic warm minimalist dot separator)", () => {
+      const output = beautifyStatus("chrome", "ready", mockTheme, "claude");
+      expect(output).toContain("chrome");
+      expect(output).toContain("·");
+      expect(output).toContain("●");
+      expect(output).toContain("ready");
+    });
+
+    it("should render openai style (GPT slate emerald tokens)", () => {
+      const output = beautifyStatus("chrome", "ready", mockTheme, "openai");
+      expect(output).toContain("chrome");
+      expect(output).toContain("⦋");
+      expect(output).toContain("▪");
+      expect(output).toContain("ready");
+      expect(output).toContain("⦌");
+    });
+
+    it("should render gemini style (celestial sparkle gradients)", () => {
+      const output = beautifyStatus("chrome", "ready", mockTheme, "gemini");
+      expect(output).toContain("chrome");
+      expect(output).toContain("✧");
+      expect(output).toContain("✦");
+      expect(output).toContain("ready");
+    });
+
+    it("should render linear style (high-density chevron)", () => {
+      const output = beautifyStatus("chrome", "ready", mockTheme, "linear");
+      expect(output).toContain("chrome");
+      expect(output).toContain("❯");
+      expect(output).toContain("●");
+    });
+
+    it("should render tokyo night and nord presets cleanly", () => {
+      const tokyo = beautifyStatus("chrome", "ready", mockTheme, "tokyo");
+      expect(tokyo).toContain("⦗");
+      expect(tokyo).toContain("✦");
+      expect(tokyo).toContain("⦘");
+
+      const nord = beautifyStatus("chrome", "ready", mockTheme, "nord");
+      expect(nord).toContain("‹");
+      expect(nord).toContain("◆");
+      expect(nord).toContain("›");
+    });
+
     it("should render custom style using configuration object", () => {
       const customCfg = {
         separator: " │ ",
