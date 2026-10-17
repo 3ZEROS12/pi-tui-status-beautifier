@@ -5,8 +5,7 @@ import {
   sliceToVisualWidth,
   padToVisualWidth,
   renderBeautifiedFooter,
-  formatFoldedBadges,
-  loadConfig
+  formatFoldedBadges
 } from "./tui-status-beautifier";
 
 describe("TUI Status Beautifier Tests", () => {

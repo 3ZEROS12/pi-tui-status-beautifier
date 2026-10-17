@@ -85,10 +85,10 @@ pi install npm:pi-tui-status-beautifier
   1. stream (默认极简流式)
      chrome ❯ ● ready    toolflow ❯ ⌬ 2/5    anchor ❯ ⌖ 3    plan ❯ ◆ 1
 
-  2. powerline (尖角分界与几何徽记)
+  2. nord (尖角分界与几何徽记)
      chrome ‹◆ ready›    toolflow ‹◈ 2/5›    anchor ‹⌖ 3›    plan ‹◆ 1›
 
-  3. matrix (点阵微框与星标)
+  3. tokyo (午夜微框与星标)
      chrome ⦗✦ ready⦘    toolflow ⦗✧ 2/5⦘    anchor ⦗⌖ 3⦘    plan ⦗✦ 1⦘
 
   4. glow (高对比度反色胶囊)
@@ -158,8 +158,7 @@ pi install npm:pi-tui-status-beautifier
 ## 质量验证
 
 ```bash
-npm test            # 物理单元测试套件 (18/18 全部通过)
-npm run lint        # ESLint 零警告
+npm run check       # 类型检查 + Lint + 45 个单元测试，全部通过
 ```
 
 ---

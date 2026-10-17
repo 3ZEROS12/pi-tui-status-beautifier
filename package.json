@@ -1,7 +1,7 @@
 {
   "name": "pi-tui-status-beautifier",
-  "version": "1.7.6",
-  "description": "Clean up your Pi terminal status bar — formats extension badges with crisp presets (Stream, Powerline, Matrix, Glow), folds idle items on narrow screens, and adds live spinners.",
+  "version": "1.8.0",
+  "description": "Clean up your Pi terminal status bar — formats extension badges with crisp presets (Claude, OpenAI, Gemini, Linear, Tokyo, Nord, Stream, Minimal, Glow), folds idle items on narrow screens, and adds live spinners.",
   "main": "extensions/tui-status-beautifier.ts",
   "keywords": [
     "pi-package",
@@ -25,6 +25,7 @@
   },
   "files": [
     "extensions/tui-status-beautifier.ts",
+    "extensions/lib",
     "assets",
     "README.md",
     "README_ja.md",
@@ -47,8 +48,10 @@
   "license": "MIT",
   "scripts": {
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"**/*.ts\""
+    "format": "prettier --write \"**/*.ts\"",
+    "check": "npm run typecheck && npm run lint && npm run test"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

@@ -85,10 +85,10 @@ Type `/beautify` to switch styles interactively:
   1. stream (Default Minimalist Stream)
      chrome ❯ ● ready    toolflow ❯ ⌬ 2/5    anchor ❯ ⌖ 3    plan ❯ ◆ 1
 
-  2. powerline (Angled Brackets & Distinct Glyphs)
+  2. nord (Angled Brackets & Distinct Glyphs)
      chrome ‹◆ ready›    toolflow ‹◈ 2/5›    anchor ‹⌖ 3›    plan ‹◆ 1›
 
-  3. matrix (Dot-Matrix Framing & Star Accents)
+  3. tokyo (Midnight Brackets & Star Accents)
      chrome ⦗✦ ready⦘    toolflow ⦗✧ 2/5⦘    anchor ⦗⌖ 3⦘    plan ⦗✦ 1⦘
 
   4. glow (High-Contrast Inverse Pill Badges)
@@ -158,8 +158,7 @@ A good status bar should be quiet, balanced, and invisible until you need it.
 ## Verification & Testing
 
 ```bash
-npm test            # 18/18 Vitest unit tests pass
-npm run lint        # Zero ESLint warnings
+npm run check       # typecheck + lint + 45 Vitest unit tests, all green
 ```
 
 ---

@@ -70,10 +70,10 @@ tmux や WezTerm の分割ペイン（`< 80` カラム）では、長すぎる�
   1. stream (デフォルト・ミニマリストストリーム)
      chrome ❯ ● ready    toolflow ❯ ⌬ 2/5    anchor ❯ ⌖ 3    plan ❯ ◆ 1
 
-  2. powerline (アングルブラケット＆幾何学グリフ)
+  2. nord (アングルブラケット＆幾何学グリフ)
      chrome ‹◆ ready›    toolflow ‹◈ 2/5›    anchor ‹⌖ 3›    plan ‹◆ 1›
 
-  3. matrix (ドットマトリクス枠＆スターアクセント)
+  3. tokyo (ミッドナイト枠＆スターアクセント)
      chrome ⦗✦ ready⦘    toolflow ⦗✧ 2/5⦘    anchor ⦗⌖ 3⦘    plan ⦗✦ 1⦘
 
   4. glow (高コントラスト反転ピルバッジ)
@@ -101,8 +101,7 @@ tmux や WezTerm の分割ペイン（`< 80` カラム）では、長すぎる�
 ## 検証とテスト
 
 ```bash
-npm test            # Vitest ユニットテスト 18/18 通過
-npm run lint        # ESLint 警告ゼロ
+npm run check       # 型チェック + Lint + 45 ユニットテスト、すべてグリーン
 ```
 
 ---
