@@ -9,7 +9,7 @@
 
 import * as path from "path";
 import { CustomStyleConfig, getPreset, resolveStyleKey } from "../theme/presets";
-import { getStringWidth } from "../core/width";
+import { getStringWidth, sliceToVisualWidth } from "../core/width";
 import { formatFoldedBadges, Badge } from "../core/fold";
 import { beautifyStatus } from "./status";
 import { sanitizeCustomConfig } from "../config/settings";
@@ -44,11 +44,11 @@ function computeTotals(source: any[]): Totals {
       totals.cacheRead += u.cacheRead || 0;
       totals.cacheWrite += u.cacheWrite || 0;
       totals.cost += u.cost?.total || 0;
-      const promptTokens = (u.input || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
-      if (promptTokens > 0 && u.cacheRead) {
-        totals.hitRate = (u.cacheRead / promptTokens) * 100;
-      }
     }
+  }
+  const totalPrompt = totals.input + totals.cacheRead + totals.cacheWrite;
+  if (totalPrompt > 0 && totals.cacheRead > 0) {
+    totals.hitRate = (totals.cacheRead / totalPrompt) * 100;
   }
   return totals;
 }
@@ -121,11 +121,32 @@ export function renderBeautifiedFooter(
   const totals = getTotals(entriesSource);
 
   const statParts: string[] = [];
-  if (totals.input > 0) statParts.push(`↑${formatCount(totals.input)}`);
-  if (totals.output > 0) statParts.push(`↓${formatCount(totals.output)}`);
-  if (totals.cacheRead > 0) statParts.push(`R${formatCount(totals.cacheRead)}`);
-  if (totals.hitRate !== undefined) statParts.push(`CH${totals.hitRate.toFixed(1)}%`);
-  if (totals.cost > 0) statParts.push(`$${totals.cost.toFixed(3)}`);
+  const plainStatParts: string[] = [];
+  if (totals.input > 0) {
+    const s = `↑${formatCount(totals.input)}`;
+    statParts.push(s);
+    plainStatParts.push(s);
+  }
+  if (totals.output > 0) {
+    const s = `↓${formatCount(totals.output)}`;
+    statParts.push(s);
+    plainStatParts.push(s);
+  }
+  if (totals.cacheRead > 0) {
+    const s = `R${formatCount(totals.cacheRead)}`;
+    statParts.push(s);
+    plainStatParts.push(s);
+  }
+  if (totals.hitRate !== undefined) {
+    const s = `CH${totals.hitRate.toFixed(1)}%`;
+    statParts.push(s);
+    plainStatParts.push(s);
+  }
+  if (totals.cost > 0) {
+    const s = `$${totals.cost.toFixed(3)}`;
+    statParts.push(s);
+    plainStatParts.push(s);
+  }
 
   const contextUsage = ctx?.getContextUsage?.();
   const contextWindow = contextUsage?.contextWindow || ctx?.model?.contextWindow || 0;
@@ -135,9 +156,11 @@ export function renderBeautifiedFooter(
     const pctStr = `${pct.toFixed(0)}%`;
     const styledPct = hasThemeFg ? theme.fg(pctColor, pctStr) : pctStr;
     statParts.push(`${styledPct}/${formatCount(contextWindow)}`);
+    plainStatParts.push(`${pctStr}/${formatCount(contextWindow)}`);
   }
 
   const tokenStr = statParts.join(" ");
+  const plainTokenStr = plainStatParts.join(" ");
   const styledTokens = tokenStr ? (hasThemeFg ? theme.fg("dim", tokenStr) : tokenStr) : "";
 
   // Thinking level with kinetic glyphs (🧠 max/high, 💭 med, ⚡ low/minimal)
@@ -151,16 +174,60 @@ export function renderBeautifiedFooter(
           : "•";
   const thinking = ctx?.thinkingLevel && ctx.thinkingLevel !== "off" ? ` ${thinkingGlyph} ${ctx.thinkingLevel}` : "";
   const fullModelStr = styledModel ? `${styledModel}${hasThemeFg ? theme.fg("dim", thinking) : thinking}` : "";
+  const plainModelStr = modelName ? `${modelName}${thinking}` : "";
 
-  // Left & right parts of Line 1
-  const leftText = styledBranch;
-  const rightParts = [styledTokens, fullModelStr].filter(Boolean);
-  const rightText = rightParts.join(styledSep);
+  // Left & right visual column metrics for narrow terminal guarding
+  const leftVis = getStringWidth(branchPart);
+  const sepVis = getStringWidth(sep);
+  const modelVis = getStringWidth(plainModelStr);
+  const tokensVis = getStringWidth(plainTokenStr);
 
-  const leftVis = getStringWidth(leftText);
-  const rightVis = getStringWidth(rightText);
-  const padLen = Math.max(1, width - leftVis - rightVis);
-  const line1 = leftText + " ".repeat(padLen) + rightText;
+  let line1: string;
+
+  const rightPartsVis = [tokensVis, modelVis].filter((w) => w > 0);
+  const rightVis =
+    rightPartsVis.length === 0
+      ? 0
+      : rightPartsVis.reduce((a, b) => a + b, 0) + (rightPartsVis.length - 1) * sepVis;
+
+  if (tokensVis > 0 && leftVis + 1 + rightVis <= width) {
+    const rightParts = [styledTokens, fullModelStr].filter(Boolean);
+    const rightText = rightParts.join(styledSep);
+    const padLen = Math.max(1, width - leftVis - rightVis);
+    line1 = styledBranch + " ".repeat(padLen) + rightText;
+  } else if (modelVis > 0 && leftVis + 1 + modelVis <= width) {
+    // Progressive compact: drop tokens if too wide, keep only model
+    const padLen = Math.max(1, width - leftVis - modelVis);
+    line1 = styledBranch + " ".repeat(padLen) + fullModelStr;
+  } else {
+    // Progressive compact: truncate plain branch/model text with sliceToVisualWidth before styling
+    if (modelVis > 0) {
+      const avail = Math.max(0, width - 1);
+      let rightBudget = Math.min(modelVis, Math.max(6, Math.floor(avail / 2)));
+      let leftBudget = avail - rightBudget;
+      if (leftVis < leftBudget) {
+        rightBudget = Math.min(modelVis, avail - leftVis);
+        leftBudget = avail - rightBudget;
+      }
+      const finalBranch = sliceToVisualWidth(branchPart, leftBudget);
+      const finalModel = sliceToVisualWidth(plainModelStr, rightBudget);
+      const styledFinalBranch = finalBranch ? (hasThemeFg ? theme.fg("dim", finalBranch) : finalBranch) : "";
+      const styledFinalModel = finalModel ? (hasThemeFg ? theme.fg("muted", finalModel) : finalModel) : "";
+
+      const finalLeftVis = getStringWidth(finalBranch);
+      const finalRightVis = getStringWidth(finalModel);
+      const padLen = Math.max(
+        finalLeftVis > 0 && finalRightVis > 0 ? 1 : 0,
+        width - finalLeftVis - finalRightVis
+      );
+      line1 = styledFinalBranch + " ".repeat(padLen) + styledFinalModel;
+    } else {
+      const finalBranch = sliceToVisualWidth(branchPart, width);
+      const styledFinalBranch = finalBranch ? (hasThemeFg ? theme.fg("dim", finalBranch) : finalBranch) : "";
+      const padLen = Math.max(0, width - getStringWidth(finalBranch));
+      line1 = styledFinalBranch + " ".repeat(padLen);
+    }
+  }
 
   const lines = [line1];
 
@@ -192,6 +259,10 @@ export function renderBeautifiedFooter(
         // Visible width must be measured on unstyled text: theme.fg only wraps,
         // and measuring the wrapped string would count its escape sequences.
         const plain = beautifyStatus(k, v, null, styleKey, customCfg) || "";
+        const compactRendered =
+          beautifyStatus(k, v, theme, styleKey, customCfg, { compact: true }) || rendered;
+        const compactPlain =
+          beautifyStatus(k, v, null, styleKey, customCfg, { compact: true }) || plain;
         const valLower = (v || "").toLowerCase();
         const isHigh =
           valLower.includes("error") ||
@@ -200,7 +271,15 @@ export function renderBeautifiedFooter(
           valLower.includes("running") ||
           valLower.includes("active") ||
           valLower.includes("starting");
-        return { key: k, val: v, rendered, isHighPriority: isHigh, width: getStringWidth(plain) };
+        return {
+          key: k,
+          val: v,
+          rendered,
+          isHighPriority: isHigh,
+          width: getStringWidth(plain),
+          compactRendered,
+          compactWidth: getStringWidth(compactPlain),
+        };
       })
       .filter((b): b is Badge => b !== null);
 

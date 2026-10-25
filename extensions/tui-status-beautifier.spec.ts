@@ -5,7 +5,8 @@ import {
   sliceToVisualWidth,
   padToVisualWidth,
   renderBeautifiedFooter,
-  formatFoldedBadges
+  formatFoldedBadges,
+  type Badge,
 } from "./tui-status-beautifier";
 
 describe("TUI Status Beautifier Tests", () => {
@@ -253,6 +254,143 @@ describe("TUI Status Beautifier Tests", () => {
       expect(cleanLine2).toContain("✦ chrome");
       expect(cleanLine2).toContain("«✦ ready»");
     });
+
+    it("computes cumulative cache hit rate across multiple turns in footer", () => {
+      const mockFooterData = {
+        getGitBranch: () => "main",
+        getExtensionStatuses: () => new Map()
+      };
+      // Turn 1: 100 input, 50 cacheRead, 50 cacheWrite -> prompt = 200, hitRate = 25%
+      // Turn 2: 100 input, 150 cacheRead, 50 cacheWrite -> prompt = 300, hitRate = 50%
+      // Cumulative: 200 input, 200 cacheRead, 100 cacheWrite -> prompt = 500, hitRate = 40.0%
+      const mockCtx = {
+        cwd: "D:/Workspace/test",
+        model: { id: "claude-3.5-sonnet" },
+        sessionManager: {
+          getBranch: () => [
+            {
+              type: "message",
+              message: { role: "assistant", usage: { input: 100, cacheRead: 50, cacheWrite: 50 } }
+            },
+            {
+              type: "message",
+              message: { role: "assistant", usage: { input: 100, cacheRead: 150, cacheWrite: 50 } }
+            }
+          ]
+        }
+      };
+
+      const lines = renderBeautifiedFooter(120, null, mockTheme, mockFooterData, mockCtx, "minimal");
+      expect(lines[0]).toContain("CH40.0%");
+    });
+
+    it("computes cumulative cache hit rate for type === 'usage' entries", () => {
+      const mockFooterData = {
+        getGitBranch: () => "main",
+        getExtensionStatuses: () => new Map()
+      };
+      const mockCtx = {
+        cwd: "D:/Workspace/test",
+        model: { id: "claude-3.5-sonnet" },
+        sessionManager: {
+          getBranch: () => [
+            {
+              type: "usage",
+              usage: { input: 200, cacheRead: 800, cacheWrite: 0 }
+            }
+          ]
+        }
+      };
+
+      const lines = renderBeautifiedFooter(120, null, mockTheme, mockFooterData, mockCtx, "minimal");
+      // 800 / (200 + 800) * 100 = 80.0%
+      expect(lines[0]).toContain("CH80.0%");
+    });
+
+    it("clamps Line 1 within terminal width on narrow terminals (width = 40)", () => {
+      const mockFooterData = {
+        getGitBranch: () => "feature/long-branch-name-overflow",
+        getExtensionStatuses: () => new Map()
+      };
+      const mockCtx = {
+        cwd: "D:/Workspace/very-long-project-folder-name",
+        model: { id: "claude-3-5-sonnet-20241022" },
+        sessionManager: {
+          getBranch: () => [
+            {
+              type: "message",
+              message: { role: "assistant", usage: { input: 12000, output: 2200, cacheRead: 5000 } }
+            }
+          ]
+        }
+      };
+
+      const lines = renderBeautifiedFooter(40, null, mockTheme, mockFooterData, mockCtx, "minimal");
+      expect(lines.length).toBeGreaterThanOrEqual(1);
+      const plainLine1 = lines[0].replace(/\[\/?\w+\]/g, "");
+      expect(getStringWidth(plainLine1)).toBeLessThanOrEqual(40);
+    });
+
+    it("clamps Line 1 within terminal width on extreme narrow terminals (width = 20)", () => {
+      const mockFooterData = {
+        getGitBranch: () => "master",
+        getExtensionStatuses: () => new Map()
+      };
+      const mockCtx = {
+        cwd: "D:/Workspace/test",
+        model: { id: "gemini-3.8-flash" },
+        sessionManager: { getBranch: () => [] }
+      };
+
+      const lines = renderBeautifiedFooter(20, null, mockTheme, mockFooterData, mockCtx, "minimal");
+      const plainLine1 = lines[0].replace(/\[\/?\w+\]/g, "");
+      expect(getStringWidth(plainLine1)).toBeLessThanOrEqual(20);
+    });
+  });
+
+  describe("Ecosystem Status Badges Parsing & Metric Preservation", () => {
+    it("preserves anchor metric 2 intact without bypassing beautifyStatus", () => {
+      const output = beautifyStatus("anchor", "⌖ 2", mockTheme, "stream") || "";
+      expect(output).toContain("anchor");
+      expect(output).toContain("⌖");
+      expect(output).toContain("(2)");
+      expect(output).not.toBe("⌖ 2");
+    });
+
+    it("preserves toolflow compact delta -1.4k intact without corrupting into 1", () => {
+      const output = beautifyStatus("toolflow", "⌬ -1.4k", mockTheme, "stream") || "";
+      expect(output).toContain("toolflow");
+      expect(output).toContain("⌬");
+      expect(output).toContain("(-1.4k)");
+      expect(output).not.toContain("(1)");
+    });
+
+    it("preserves toolflow signed delta -250 intact", () => {
+      const output = beautifyStatus("toolflow", "⌬ -250", mockTheme, "stream") || "";
+      expect(output).toContain("toolflow");
+      expect(output).toContain("(-250)");
+    });
+
+    it("preserves toolflow compound fraction and delta metric", () => {
+      const output = beautifyStatus("toolflow", "⌬ [1/3 · Setup] · ⌬ -1.4k", mockTheme, "stream") || "";
+      expect(output).toContain("toolflow");
+      expect(output).toContain("1/3");
+      expect(output).toContain("-1.4k");
+    });
+
+    it("preserves lingual language pair intact without corruption", () => {
+      const output = beautifyStatus("lingual", "zh ⇄ en · Companion", mockTheme, "stream") || "";
+      expect(output).toContain("lingual");
+      expect(output).toContain("⇄");
+      expect(output).toContain("zh ⇄ en · Companion");
+    });
+
+    it("handles active lingual polishing status with micro-spinner", () => {
+      const output = beautifyStatus("lingual", "⇄ [lingual] polishing...", mockTheme, "stream") || "";
+      expect(output).toContain("lingual");
+      const clean = output.replace(/\[\/?\w+\]/g, "");
+      expect(/lingual ❯ [◐◓◑◒]/.test(clean)).toBe(true);
+    });
   });
 
   describe("Adaptive Badge Folding & Symbology", () => {
@@ -286,6 +424,141 @@ describe("TUI Status Beautifier Tests", () => {
       const narrow = formatFoldedBadges(rawBadges, 50, mockTheme);
       expect(narrow).toContain("toolflow");
       expect(narrow).toContain("(+3 idle)");
+    });
+  });
+
+  describe("3-Tier Badge Compaction (Tier 1 Full ➔ Tier 2 Compact Idle ➔ Tier 3 Folded)", () => {
+    it("beautifyStatus strips ready while keeping chrome and ‹◆›, whereas toolflow preserves -1.4k in compact mode", () => {
+      const chromeCompact =
+        beautifyStatus("chrome", "ready", mockTheme, "nord", undefined, { compact: true }) || "";
+      expect(chromeCompact).toContain("chrome");
+      expect(chromeCompact).toContain("‹");
+      expect(chromeCompact).toContain("◆");
+      expect(chromeCompact).toContain("›");
+      expect(chromeCompact).not.toContain("ready");
+
+      const toolflowCompact =
+        beautifyStatus("toolflow", "⌬ -1.4k", mockTheme, "nord", undefined, { compact: true }) || "";
+      expect(toolflowCompact).toContain("toolflow");
+      expect(toolflowCompact).toContain("-1.4k");
+    });
+
+    it("strips generic idle words in compact mode while preserving natural width and metrics", () => {
+      // Skips 10-column padding in minimal preset when compact: true
+      const minimalCompact =
+        beautifyStatus("chrome", "ready", mockTheme, "minimal", undefined, { compact: true }) || "";
+      const cleanMin = minimalCompact.replace(/\[\/?\w+\]/g, "");
+      expect(cleanMin.startsWith("chrome ❯")).toBe(true);
+
+      for (const word of ["ready", "idle", "ok", "online", "active", "connected", "listening"]) {
+        const out = beautifyStatus("chrome", word, mockTheme, "stream", undefined, { compact: true }) || "";
+        expect(out).toContain("chrome");
+        expect(out).toContain("●");
+        expect(out).not.toContain(word);
+      }
+
+      // Meaningful metrics are preserved
+      expect(beautifyStatus("anchor", "⌖ 2", mockTheme, "stream", undefined, { compact: true })).toContain("(2)");
+      expect(
+        beautifyStatus("toolflow", "⌬ [1/3 · Setup] · ⌬ -1.4k", mockTheme, "stream", undefined, { compact: true })
+      ).toContain("1/3");
+      expect(
+        beautifyStatus("lingual", "zh ⇄ en · Companion", mockTheme, "stream", undefined, { compact: true })
+      ).toContain("zh ⇄ en · Companion");
+    });
+
+    it("formatFoldedBadges Tier 2 keeps all badges visible in compact form at intermediate terminal widths before falling back to Tier 3 (+N idle)", () => {
+      const badges: Badge[] = [
+        {
+          key: "chrome",
+          val: "ready",
+          rendered: "chrome ❯ ● ready",
+          width: 16,
+          compactRendered: "chrome ❯ ●",
+          compactWidth: 10,
+          isHighPriority: false,
+        },
+        {
+          key: "plan",
+          val: "ready",
+          rendered: "plan ❯ ● ready",
+          width: 14,
+          compactRendered: "plan ❯ ●",
+          compactWidth: 8,
+          isHighPriority: false,
+        },
+        {
+          key: "toolflow",
+          val: "running",
+          rendered: "toolflow ❯ ◐ 1/3",
+          width: 16,
+          compactRendered: "toolflow ❯ ◐ 1/3",
+          compactWidth: 16,
+          isHighPriority: true,
+        },
+      ];
+
+      // Tier 1 (Full): width 55 >= 50 -> All 3 full badges visible
+      const tier1 = formatFoldedBadges(badges, 55, mockTheme);
+      expect(tier1).toContain("chrome ❯ ● ready");
+      expect(tier1).toContain("plan ❯ ● ready");
+      expect(tier1).toContain("toolflow ❯ ◐ 1/3");
+      expect(tier1).not.toContain("idle");
+
+      // Tier 2 (Compact): intermediate width 42 (compact joined = 38 <= 42 < 50 full)
+      const tier2 = formatFoldedBadges(badges, 42, mockTheme);
+      expect(tier2).toContain("chrome ❯ ●");
+      expect(tier2).toContain("plan ❯ ●");
+      expect(tier2).toContain("toolflow ❯ ◐ 1/3");
+      expect(tier2).not.toContain("ready");
+      expect(tier2).not.toContain("idle");
+
+      // Tier 3 (Folded): width 30 < 38 -> falls back to priority folding
+      const tier3 = formatFoldedBadges(badges, 30, mockTheme);
+      expect(tier3).toContain("toolflow ❯ ◐ 1/3");
+      expect(tier3).toContain("(+2 idle)");
+      expect(tier3).not.toContain("chrome");
+    });
+
+    it("renderBeautifiedFooter uses Tier 2 compaction on medium-width terminals so idle plugins stay visible as compact glyph badges", () => {
+      const mockFooterData = {
+        getGitBranch: () => "main",
+        getExtensionStatuses: () =>
+          new Map([
+            ["pi-control-chrome", "ready"],
+            ["plan", "ready"],
+            ["toolflow", "running 1/3"],
+          ]),
+      };
+      const mockCtx = {
+        cwd: "D:/Workspace/test",
+        model: { id: "gemini-3.8-flash" },
+        sessionManager: { getBranch: () => [] },
+      };
+
+      // 1. Wide terminal (width = 80): Tier 1 Full (all visible, includes "ready")
+      const wideLines = renderBeautifiedFooter(80, null, mockTheme, mockFooterData, mockCtx, "stream");
+      const cleanWide = wideLines[1].replace(/\[\/?\w+\]/g, "");
+      expect(cleanWide).toContain("chrome");
+      expect(cleanWide).toContain("plan");
+      expect(cleanWide).toContain("toolflow");
+      expect(cleanWide).toContain("ready");
+      expect(cleanWide).not.toContain("idle");
+
+      // 2. Medium terminal (width = 50): Tier 2 Compact (all visible as compact glyph badges without folding into idle)
+      const medLines = renderBeautifiedFooter(50, null, mockTheme, mockFooterData, mockCtx, "stream");
+      const cleanMed = medLines[1].replace(/\[\/?\w+\]/g, "");
+      expect(cleanMed).toContain("chrome");
+      expect(cleanMed).toContain("plan");
+      expect(cleanMed).toContain("toolflow");
+      expect(cleanMed).not.toContain("ready");
+      expect(cleanMed).not.toContain("idle");
+
+      // 3. Narrow terminal (width = 33): Tier 3 Folded (compact badges exceed budget, folds idle into (+2 idle))
+      const narrowLines = renderBeautifiedFooter(33, null, mockTheme, mockFooterData, mockCtx, "stream");
+      const cleanNarrow = narrowLines[1].replace(/\[\/?\w+\]/g, "");
+      expect(cleanNarrow).toContain("toolflow");
+      expect(cleanNarrow).toContain("(+2 idle)");
     });
   });
 });

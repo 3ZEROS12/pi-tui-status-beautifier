@@ -99,7 +99,11 @@ async function pickStyle(ctx: any, rawInput: string): Promise<string | undefined
 export async function runBeautify(pi: any, args: string | undefined, ctx: any): Promise<void> {
   if (!ctx.hasUI || !ctx.ui) return;
 
-  const styleKey = await pickStyle(ctx, (args || "").trim().toLowerCase());
+  const tokens = (args || "").trim().split(/\s+/).filter(Boolean);
+  const firstToken = tokens[0] || "";
+  const secondToken = tokens[1]?.toLowerCase();
+
+  const styleKey = await pickStyle(ctx, firstToken.toLowerCase());
   if (!styleKey) return;
 
   // Zero-trace physical cleanup & revert
@@ -132,15 +136,23 @@ export async function runBeautify(pi: any, args: string | undefined, ctx: any): 
   }
 
   // Stage 2: Scope Selection Wizard (Two-stage flow)
-  const scopeOptions = [
-    "status-only - Plugin status badges only (Recommended: keeps native Pi path, tokens & thinking level)",
-    "full-footer - Full-footer beautification (Transforms Git branch, model, and tokens too)",
-  ];
+  let isFullFooter: boolean;
+  if (secondToken === "status" || secondToken === "status-only") {
+    isFullFooter = false;
+  } else if (secondToken === "full" || secondToken === "full-footer") {
+    isFullFooter = true;
+  } else {
+    const scopeOptions = [
+      "status-only - Plugin status badges only (Recommended: keeps native Pi path, tokens & thinking level)",
+      "full-footer - Full-footer beautification (Transforms Git branch, model, and tokens too)",
+    ];
 
-  const scopeChoice = await ctx.ui.select("Choose beautification scope:", scopeOptions);
-  if (!scopeChoice) return;
+    const scopeChoice = await ctx.ui.select("Choose beautification scope:", scopeOptions);
+    if (!scopeChoice) return;
 
-  const isFullFooter = scopeChoice.startsWith("full-footer");
+    isFullFooter = scopeChoice.startsWith("full-footer");
+  }
+
   const cwd = ctx.cwd || process.cwd();
 
   // Read once, then apply the user's fresh choice as an override, then persist.

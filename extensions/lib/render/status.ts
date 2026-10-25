@@ -16,14 +16,31 @@ import { runtime } from "../state";
 
 // Hoisted regex patterns to prevent instantiation and GC overhead in the render hot-path
 const STATUS_PATTERN =
-  /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋⌬★✦◇»«‹›⦗⦘]|[0-9]+\/[0-9]+|\b(?:active|online|offline|running|paused|error|success|connected|disconnected|ready|idle|ok|done|failed|waiting|stopped|listening|cleanup|starting)\b/i;
+  /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋⌬★✦◇»«‹›⦗⦘⌖⇄]|[0-9]+\/[0-9]+|\b(?:active|online|offline|running|paused|error|success|connected|disconnected|ready|idle|ok|done|failed|waiting|stopped|listening|cleanup|starting)\b/i;
 const NAME_SUFFIX_PATTERN = /-(extension|plugin|assistant|adapter|slash-text|slash|text|widget)$/gi;
+const LANG_PAIR_PATTERN = /([a-z]{2,3}\s*⇄\s*[a-z]{2,3}(?:\s*·\s*[^\r\n]+)?)/i;
 const FRACTION_PATTERN = /(\d+\/\d+|\d+%\s*)/;
+const SIGNED_UNIT_PATTERN = /([+-]?\d+(?:\.\d+)?[kKmM]\b|[+-]\d+(?:\.\d+)?%?)/;
+const DELTA_METRIC_PATTERN = /([+-]\d+(?:\.\d+)?[kKmM]\b|[+-]\d+(?:\.\d+)?%?)/;
 const PARENTHESES_PATTERN = /\((\d+)\)/;
 const BRACKET_PATTERN = /\[(\d+)\]/;
 const NUMBER_PATTERN = /\b(\d+)\b/;
 const WORD_STATE_PATTERN =
-  /(?::\s*|\b)(ready|idle|ok|done|failed|waiting|cleanup|active|online|offline|running|paused|error|success|connected|disconnected)\b/i;
+  /(?::\s*|\b)(ready|idle|ok|done|failed|waiting|cleanup|active|online|offline|running|paused|error|success|connected|disconnected|listening|stopped|starting)\b/i;
+
+export const GENERIC_IDLE_WORDS = new Set([
+  "ready",
+  "idle",
+  "ok",
+  "online",
+  "active",
+  "connected",
+  "listening",
+]);
+
+export interface BeautifyStatusOptions {
+  compact?: boolean;
+}
 
 /** True when the status text implies an in-flight operation (drives the spinner). */
 export function isSpinningStatus(value: string | undefined): boolean {
@@ -43,7 +60,8 @@ export function beautifyStatus(
   originalVal: string | undefined,
   theme: any,
   style: string,
-  customCfg?: CustomStyleConfig
+  customCfg?: CustomStyleConfig,
+  options?: BeautifyStatusOptions
 ): string | undefined {
   if (originalVal === undefined) return undefined;
   const styleKey = resolveStyleKey(style);
@@ -76,32 +94,60 @@ export function beautifyStatus(
     }
     const preset = getPreset(styleKey, styleKey === "custom" ? customCfg || runtime.custom || {} : customCfg);
 
+    const isCompact = options?.compact === true;
     const visualName =
-      preset.padName === true
+      preset.padName === true && !isCompact
         ? padToVisualWidth(sliceToVisualWidth(name, 10), 10)
         : name;
 
+    // Dynamic micro-spinner for active in-progress / running states (running, working, starting, waiting)
+    const isSpinning = isSpinningStatus(cleanVal);
+
     // 2. Extract metrics/progress details safely (e.g. (2) or fraction 2/5 or count)
     let details: string | undefined;
-    const fractionMatch = cleanVal.match(FRACTION_PATTERN);
-    if (fractionMatch) {
-      details = fractionMatch[1];
-    } else {
-      const countMatch = cleanVal.match(PARENTHESES_PATTERN) || cleanVal.match(BRACKET_PATTERN);
-      if (countMatch) {
-        details = countMatch[1];
-      } else {
-        const numberMatch = cleanVal.match(NUMBER_PATTERN);
-        if (numberMatch) {
-          details = numberMatch[1];
+
+    if (!isSpinning) {
+      const langMatch = cleanVal.match(LANG_PAIR_PATTERN);
+      if (langMatch) {
+        details = langMatch[1].trim();
+      }
+    }
+
+    if (!details) {
+      const fractionMatch = cleanVal.match(FRACTION_PATTERN);
+      if (fractionMatch) {
+        const deltaMatch = cleanVal.match(DELTA_METRIC_PATTERN);
+        if (deltaMatch) {
+          details = `${fractionMatch[1].trim()} · ${deltaMatch[1].trim()}`;
         } else {
-          // If no numeric metric exists, extract the status word descriptor (e.g. "ready", "idle", "cleanup")
-          const wordMatch = cleanVal.match(WORD_STATE_PATTERN);
-          if (wordMatch) {
-            details = wordMatch[1].toLowerCase();
+          details = fractionMatch[1].trim();
+        }
+      } else {
+        const metricMatch = cleanVal.match(SIGNED_UNIT_PATTERN);
+        if (metricMatch) {
+          details = metricMatch[1].trim();
+        } else {
+          const countMatch = cleanVal.match(PARENTHESES_PATTERN) || cleanVal.match(BRACKET_PATTERN);
+          if (countMatch) {
+            details = countMatch[1];
+          } else {
+            const numberMatch = cleanVal.match(NUMBER_PATTERN);
+            if (numberMatch) {
+              details = numberMatch[1];
+            } else {
+              // If no numeric metric exists, extract the status word descriptor (e.g. "ready", "idle", "cleanup")
+              const wordMatch = cleanVal.match(WORD_STATE_PATTERN);
+              if (wordMatch) {
+                details = wordMatch[1].toLowerCase();
+              }
+            }
           }
         }
       }
+    }
+
+    if (isCompact && details && GENERIC_IDLE_WORDS.has(details.toLowerCase())) {
+      details = undefined;
     }
 
     // 3. Determine state based on colors, icons, emojis or text keywords in original val
@@ -164,7 +210,6 @@ export function beautifyStatus(
                   : "●";
 
     // Dynamic micro-spinner for active in-progress / running states (running, working, starting, waiting)
-    const isSpinning = isSpinningStatus(cleanVal);
     if (isSpinning) {
       defaultGlyph = SPINNERS[Math.floor(Date.now() / 300) % SPINNERS.length];
     }

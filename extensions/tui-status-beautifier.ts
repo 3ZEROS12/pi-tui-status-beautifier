@@ -7,9 +7,11 @@ import { runBeautify } from "./lib/command";
 
 // Public surface kept on the entry module so tests and downstream imports keep
 // resolving from a single path.
-export { beautifyStatus, isSpinningStatus } from "./lib/render/status";
+export { beautifyStatus, isSpinningStatus, GENERIC_IDLE_WORDS } from "./lib/render/status";
+export type { BeautifyStatusOptions } from "./lib/render/status";
 export { getStringWidth, isFullWidth, sliceToVisualWidth, padToVisualWidth } from "./lib/core/width";
 export { formatFoldedBadges } from "./lib/core/fold";
+export type { Badge } from "./lib/core/fold";
 export { renderBeautifiedFooter, createFooterFactory } from "./lib/render/footer";
 export {
   loadConfig,
