@@ -127,6 +127,21 @@ describe("TUI Status Beautifier Tests", () => {
       expect(output).toContain("~1.4k saved");
     });
 
+    it("should keep stage progress when a savings metric is also present", () => {
+      const staged = beautifyStatus(
+        "toolflow",
+        "[2/3] Implementing · ~1.4k saved · 3 hits · 2 guarded",
+        mockTheme,
+        "claude"
+      );
+      expect(staged).toContain("2/3");
+      expect(staged).toContain("~1.4k saved");
+
+      const idle = beautifyStatus("toolflow", "~1.4k saved · 3 hits · 2 guarded", mockTheme, "claude");
+      expect(idle).toContain("~1.4k saved");
+      expect(idle).not.toContain("2/3");
+    });
+
 
     it("should render custom style using configuration object", () => {
       const customCfg = {

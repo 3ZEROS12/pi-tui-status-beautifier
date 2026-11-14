@@ -116,7 +116,10 @@ export function beautifyStatus(
     if (!details) {
       const savedMatch = cleanVal.match(SAVED_METRIC_PATTERN);
       if (savedMatch) {
-        details = savedMatch[1].trim();
+        const progressMatch = cleanVal.match(FRACTION_PATTERN);
+        details = progressMatch
+          ? `${progressMatch[1].trim()} · ${savedMatch[1].trim()}`
+          : savedMatch[1].trim();
       }
     }
 

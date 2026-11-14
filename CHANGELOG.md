@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.9.1] - 2026-11-14
+
+### Fixed
+- A badge that carries both stage progress and a savings metric (`[2/3] Implementing · ~1.4k saved`) no longer loses the progress figure: the detail slot now composes `2/3 · ~1.4k saved` instead of showing savings alone. Values without a fraction render unchanged.
+- Guard and cache-hit counters (`2 guarded`, `3 hits`) no longer need to be in the vocabulary for the badge to survive compaction; the savings metric already anchors it.
+
+### Added
+- Unit test suite expanded to 69 tests passing (100% green).
+
 ## [1.9.0] - 2026-11-14
 
 ### Changed
