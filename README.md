@@ -158,7 +158,7 @@ A good status bar should be quiet, balanced, and invisible until you need it.
 ## Verification & Testing
 
 ```bash
-npm run check       # typecheck + lint + 45 Vitest unit tests, all green
+npm run check       # typecheck + lint + 72 Vitest unit tests, all green
 ```
 
 ---

@@ -143,6 +143,17 @@ describe("TUI Status Beautifier Tests", () => {
     });
 
 
+    it("should keep sub-1k savings that Toolflow emits without a unit", () => {
+      // Toolflow's compact badge drops the k suffix below 1000, including "~0 saved".
+      const fresh = beautifyStatus("toolflow", "~0 saved", mockTheme, "claude");
+      expect(fresh).toContain("~0 saved");
+      expect(fresh).toContain("⌬");
+
+      const partial = beautifyStatus("toolflow", "[2/3] Implementing · ~850 saved", mockTheme, "claude");
+      expect(partial).toContain("2/3");
+      expect(partial).toContain("~850 saved");
+    });
+
     it("should render custom style using configuration object", () => {
       const customCfg = {
         separator: " │ ",

@@ -157,20 +157,17 @@ function atomicWriteJson(filePath: string, value: unknown): void {
     try {
       fs.renameSync(tempPath, filePath);
     } catch {
-      try {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      } catch {
-        // Ignore locked target before rename retry.
-      }
-      fs.renameSync(tempPath, filePath);
+      // Windows refuses to rename over a file held open by another process. Overwrite in
+      // place instead — the previous implementation unlinked the target first, so a second
+      // failure destroyed the user's settings.json outright.
+      fs.copyFileSync(tempPath, filePath);
     }
-  } catch (error) {
+  } finally {
     try {
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     } catch {
       // Best effort temp cleanup only.
     }
-    throw error;
   }
 }
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- Sub-1k savings metrics are recognized: Toolflow emits `~850 saved` and `~0 saved` without a unit, and the savings pattern required one, so a fresh install rendered `⌬ (0)` and a staged badge silently dropped the metric.
+- Writing `settings.json` can no longer delete it: when the target was locked, the writer unlinked it before a second rename that could also fail. The fallback now overwrites in place, so a failed write leaves the previous file untouched.
+- The config test suite no longer escapes its sandbox: `settingsPaths()` prefers `PI_CODING_AGENT_DIR`/`PI_CONFIG_DIR` over `HOME`, and the specs only overrode `HOME`, so global writes could land in the developer's real `~/.pi/agent/settings.json`. Both variables are now cleared per test.
+
+### Added
+- Unit test suite expanded to 72 tests passing (100% green).
+
 ## [1.9.1] - 2026-11-14
 
 ### Fixed

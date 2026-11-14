@@ -158,7 +158,7 @@ pi install npm:pi-tui-status-beautifier
 ## 质量验证
 
 ```bash
-npm run check       # 类型检查 + Lint + 45 个单元测试，全部通过
+npm run check       # 类型检查 + Lint + 72 个单元测试，全部通过
 ```
 
 ---

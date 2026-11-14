@@ -12,6 +12,7 @@ import {
   writeBeautifierSettings,
   removeBeautifierSettings,
   resolveStyleKey,
+  settingsPaths,
   applyConfig,
   resetRuntime,
   runtime,
@@ -27,6 +28,8 @@ let home: string;
 let project: string;
 let previousHome: string | undefined;
 let previousUserProfile: string | undefined;
+let previousAgentDir: string | undefined;
+let previousConfigDir: string | undefined;
 
 const globalSettings = () => path.join(home, ".pi", "agent", "settings.json");
 const localSettings = () => path.join(project, ".pi", "settings.json");
@@ -39,10 +42,16 @@ function writeJson(filePath: string, value: unknown): void {
 beforeEach(() => {
   previousHome = process.env.HOME;
   previousUserProfile = process.env.USERPROFILE;
+  previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  previousConfigDir = process.env.PI_CONFIG_DIR;
   home = fs.mkdtempSync(path.join(os.tmpdir(), "beautifier-home-"));
   project = fs.mkdtempSync(path.join(os.tmpdir(), "beautifier-proj-"));
   process.env.HOME = home;
   process.env.USERPROFILE = home;
+  // settingsPaths() prefers these over HOME, so leaving them set makes every global write
+  // in this suite land in the developer's real ~/.pi/agent/settings.json.
+  delete process.env.PI_CODING_AGENT_DIR;
+  delete process.env.PI_CONFIG_DIR;
 });
 
 afterEach(() => {
@@ -50,6 +59,10 @@ afterEach(() => {
   else process.env.HOME = previousHome;
   if (previousUserProfile === undefined) delete process.env.USERPROFILE;
   else process.env.USERPROFILE = previousUserProfile;
+  if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+  else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+  if (previousConfigDir === undefined) delete process.env.PI_CONFIG_DIR;
+  else process.env.PI_CONFIG_DIR = previousConfigDir;
   fs.rmSync(home, { recursive: true, force: true });
   fs.rmSync(project, { recursive: true, force: true });
 });
@@ -477,5 +490,14 @@ describe("3-Tier Badge Compaction & Configuration Lifecycle", () => {
     const cleanNarrow = narrowLines[1].replace(/\[\/?\w+\]/g, "");
     expect(cleanNarrow).toContain("toolflow");
     expect(cleanNarrow).toContain("(+2 idle)");
+  });
+});
+
+describe("Settings path resolution stays inside the sandbox", () => {
+  it("ignores a stale PI_CODING_AGENT_DIR and resolves under the temp HOME", () => {
+    const paths = settingsPaths(project);
+    expect(paths.globalPath.startsWith(home)).toBe(true);
+    expect(paths.globalPath).toBe(globalSettings());
+    expect(paths.localPath).toBe(path.join(project, ".pi", "settings.json"));
   });
 });
