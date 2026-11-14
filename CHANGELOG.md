@@ -8,7 +8,14 @@
 - The config test suite no longer escapes its sandbox: `settingsPaths()` prefers `PI_CODING_AGENT_DIR`/`PI_CONFIG_DIR` over `HOME`, and the specs only overrode `HOME`, so global writes could land in the developer's real `~/.pi/agent/settings.json`. Both variables are now cleared per test.
 
 ### Added
-- Unit test suite expanded to 72 tests passing (100% green).
+- `sliceToVisualWidth` no longer returns a slice wider than its budget: emoji presentation (FE0F) and keycap sequences now charge the same cells `getStringWidth` measures, so footer budgets hold.
+- Line 1 stays inside the terminal at 5 columns; the 6-cell model floor is clamped to the space actually available.
+- `[1/3] Implementing` style stages (and `▲ Paused`) count as high priority, so an in-progress Toolflow stage is no longer folded under `(+N idle)`.
+- Custom style config from disk is sanitized at the render choke point: `separator: 12` used to throw and reset every badge to raw text, and a one-element `brackets` array rendered an unclosed glyph. Inverse pills honor the configured separator.
+- Width decisions no longer use UTF-16 `.length` as a proxy, and ANSI is stripped before the 512-unit cap (a bisected escape used to leak `38;5` style parameters into the metric).
+- `sanitizeCustomConfig` clamps by code point, so a clamped string can no longer end on a lone surrogate.
+- README/AGENTS default claims match the shipped `claude` + `fullFooter: true` defaults, and release tooling stages `extensions/` wholesale instead of a hand-copied entry file that could not load.
+- Unit test suite expanded to 79 tests passing (100% green).
 
 ## [1.9.1] - 2026-11-14
 

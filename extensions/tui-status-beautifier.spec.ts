@@ -6,6 +6,7 @@ import {
   padToVisualWidth,
   renderBeautifiedFooter,
   formatFoldedBadges,
+  sanitizeCustomConfig,
   type Badge,
 } from "./tui-status-beautifier";
 
@@ -611,4 +612,86 @@ describe("TUI Status Beautifier Tests", () => {
       expect(directRes).toContain("en · direct");
     });
   });
+  describe("Width budgets and render hardening", () => {
+    it("never returns a slice wider than the budget it was given", () => {
+      expect(getStringWidth(sliceToVisualWidth("\u2764\uFE0F", 1))).toBeLessThanOrEqual(1);
+      expect(getStringWidth(sliceToVisualWidth("a1\uFE0F\u20E3", 2))).toBeLessThanOrEqual(2);
+      expect(getStringWidth(sliceToVisualWidth("\u{1F468}\u200D\u{1F469}\u200D\u{1F467}", 2))).toBeLessThanOrEqual(2);
+    });
+
+    it("measures the overflow guard in cells, not UTF-16 units", () => {
+      const wide = "\u8A9E".repeat(40); // 40 UTF-16 units, 80 terminal cells
+      const out = beautifyStatus("myplugin", wide, mockTheme, "claude") || "";
+      expect(getStringWidth(out)).toBeLessThanOrEqual(32);
+    });
+
+    it("renders through a malformed custom config instead of dropping the detail", () => {
+      const numericSep = beautifyStatus("toolflow", "\u232C ~1.4k saved", mockTheme, "custom", {
+        separator: 12 as unknown as string,
+      });
+      expect(numericSep).toContain("~1.4k saved");
+
+      const unclosedBracket = beautifyStatus("anchor", "\u2316 2", mockTheme, "custom", {
+        brackets: ["\u2039"] as unknown as [string, string],
+      });
+      expect(unclosedBracket).not.toContain("\u2039");
+    });
+
+    it("honors a custom separator on inverse pills", () => {
+      const out = beautifyStatus("anchor", "\u2316 2", mockTheme, "custom", {
+        inverse: true,
+        separator: " \u2502 ",
+      });
+      expect(out).toContain("\u2502");
+    });
+
+    it("clamps custom strings by code point without splitting surrogate pairs", () => {
+      const cfg = sanitizeCustomConfig({
+        prefix: "\u{1F468}".repeat(20),
+        separator: "\u8A9E".repeat(20),
+      });
+      expect(cfg?.prefix).not.toContain("\uFFFD");
+      expect([...(cfg?.prefix || "")].length).toBe(16);
+      expect([...(cfg?.separator || "")].length).toBe(12);
+    });
+
+    it("keeps line 1 within five columns", () => {
+      const mockFooterData = {
+        getGitBranch: () => "main",
+        getExtensionStatuses: () => new Map<string, string>(),
+      };
+      const mockCtx = {
+        cwd: "D:/Workspace/test",
+        model: { id: "claude-3.5-sonnet" },
+        sessionManager: { getBranch: () => [] },
+      };
+      const lines = renderBeautifiedFooter(5, null, mockTheme, mockFooterData, mockCtx, "minimal");
+      for (const line of lines) {
+        expect(getStringWidth(line.replace(/\[\/?\w+\]/g, ""))).toBeLessThanOrEqual(5);
+      }
+    });
+
+    it("keeps an in-progress toolflow stage out of the idle fold", () => {
+      const mockFooterData = {
+        getGitBranch: () => "main",
+        getExtensionStatuses: () =>
+          new Map<string, string>([
+            ["toolflow", "[1/3] Implementing \u00B7 ~850 saved"],
+            ["pi-control-chrome", "chrome: ready"],
+          ]),
+      };
+      const mockCtx = {
+        cwd: "D:/Workspace/test",
+        model: { id: "claude-3.5-sonnet" },
+        sessionManager: { getBranch: () => [{ type: "message", message: { role: "assistant", usage: { input: 100 } } }] },
+      };
+      const joined = renderBeautifiedFooter(33, null, mockTheme, mockFooterData, mockCtx, "minimal")
+        .join("\n")
+        .replace(/\[\/?\w+\]/g, "");
+      // The stage badge must survive compaction; Chrome's idle badge is the one folded away.
+      expect(joined).toContain("1/3");
+      expect(joined).not.toContain("chrome");
+    });
+  });
+
 });

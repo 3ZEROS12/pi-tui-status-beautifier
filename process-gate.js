@@ -182,10 +182,11 @@ if (isTriggered) {
 
   // Stage changes and commit safely
   console.log('Staging and committing release version bump...');
+  // Stage the whole extensions tree: the entry file re-exports from extensions/lib/**,
+  // so listing single files shipped releases without the code they depend on.
   const filesToRelease = [
     'package.json',
-    'extensions/tui-status-beautifier.ts',
-    'extensions/tui-status-beautifier.spec.ts',
+    'extensions',
     'CHANGELOG.md',
     'accumulated-suggestions.json'
   ];
@@ -206,14 +207,9 @@ if (isTriggered) {
 
     console.log('Live release completed successfully.');
 
-    // Sync updated extension to global directory
-    const globalPath = path.join(process.env.USERPROFILE || process.env.HOME || '', '.pi/agent/extensions/tui-status-beautifier.ts');
-    try {
-      fs.copyFileSync(path.join(__dirname, 'extensions/tui-status-beautifier.ts'), globalPath);
-      console.log(`Successfully synchronized updated extension to global directory: ${globalPath}`);
-    } catch (err) {
-      console.error('Failed to sync updated extension to global directory:', err);
-    }
+    // No hand-copy into ~/.pi/agent/extensions: the entry file imports ./lib/**, so copying
+    // it alone produced an extension that throws on load. Install via pi instead.
+    console.log('Install the release with: pi install npm:pi-tui-status-beautifier');
   } else {
     console.log('No modifications for release. Skipping tag and npm publish.');
   }

@@ -60,8 +60,9 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.setStatus = wrapped;
     }
 
-    // 2. Hook setFooter ONLY if user explicitly opted in with fullFooter === true!
-    // By default fullFooter is FALSE: Pi's native top two lines remain 100% native and untouched!
+    // 2. Hook setFooter only for the full-footer scope. It ships enabled (fullFooter: true in
+    // the default config); `/beautify <style> status` turns it back off and restores Pi's
+    // native top two lines untouched.
     if (typeof (ctx.ui as any).setFooter === "function") {
       if (runtime.fullFooter && runtime.style !== "off") {
         (ctx.ui as any).setFooter(createFooterFactory(ctx));

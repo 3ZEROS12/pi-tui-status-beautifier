@@ -11,8 +11,9 @@ import {
   resolveStyleKey,
   OFF_STYLES,
 } from "../theme/presets";
-import { ANSI_STRIP_REGEX, padToVisualWidth, sliceToVisualWidth } from "../core/width";
+import { ANSI_STRIP_REGEX, getStringWidth, padToVisualWidth, sliceToVisualWidth } from "../core/width";
 import { runtime } from "../state";
+import { sanitizeCustomConfig } from "../config/settings";
 
 // Hoisted regex patterns to prevent instantiation and GC overhead in the render hot-path
 const STATUS_PATTERN =
@@ -71,14 +72,18 @@ export function beautifyStatus(
   if (styleKey === "off" || OFF_STYLES.has((style || "").toLowerCase().trim())) return originalVal;
 
   try {
-    const boundedVal = originalVal.length > 512 ? originalVal.slice(0, 512) : originalVal;
-    const hasAnsi = boundedVal.includes("\u001B") || boundedVal.includes("\u009B");
-    const cleanVal = hasAnsi ? boundedVal.replace(ANSI_STRIP_REGEX, "").trim() : boundedVal.trim();
+    // Strip ANSI first, then cap: a 512-unit slice can bisect an escape sequence and the
+    // orphaned parameters (`38;5`) then read as badge metrics. The cap itself is applied on
+    // code points so a surrogate pair is never split.
+    const stripped = originalVal.replace(ANSI_STRIP_REGEX, "");
+    const boundedVal = stripped.length > 512 ? [...stripped].slice(0, 512).join("") : stripped;
+    const cleanVal = boundedVal.trim();
 
     if (cleanVal === "") return "";
 
     if (!STATUS_PATTERN.test(cleanVal)) {
-      return originalVal.length > 64 ? sliceToVisualWidth(cleanVal, 32) : originalVal;
+      // Cells, not UTF-16 units: 40 CJK glyphs are 80 columns wide.
+      return getStringWidth(cleanVal) > 64 ? sliceToVisualWidth(cleanVal, 32) : originalVal;
     }
 
     // 1. Get display name (compact natural width by default to save precious terminal columns)
@@ -95,7 +100,12 @@ export function beautifyStatus(
         name = COMMON_NAMES[name];
       }
     }
-    const preset = getPreset(styleKey, styleKey === "custom" ? customCfg || runtime.custom || {} : customCfg);
+    // Disk data reaches this point unsanitized (footer passes the raw custom block through),
+    // and a malformed value like `separator: 12` used to throw and reset every badge.
+    const preset = getPreset(
+      styleKey,
+      styleKey === "custom" ? sanitizeCustomConfig(customCfg || runtime.custom || {}) : customCfg
+    );
 
     const isCompact = options?.compact === true;
     const visualName =
@@ -246,7 +256,11 @@ export function beautifyStatus(
     if (preset.inverse && theme && typeof theme.inverse === "function") {
       const pillContent = ` ${glyph}${details ? ` ${details}` : ""} `;
       const coloredBadge = hasThemeFg ? theme.inverse(theme.fg(state, pillContent)) : `[${pillContent}]`;
-      return `${prefix}${dimmedName} ${coloredBadge}${suffix}`;
+      const inverseSep =
+        hasThemeFg && (sep.includes("│") || sep.includes("⁝") || sep.includes("❯") || sep.includes("»"))
+          ? theme.fg("dim", sep)
+          : sep;
+      return `${prefix}${dimmedName}${inverseSep}${coloredBadge}${suffix}`;
     }
 
     let badge = coloredGlyph;

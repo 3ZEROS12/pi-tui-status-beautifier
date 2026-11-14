@@ -29,8 +29,6 @@ export const STYLE_MENU: string[] = [
   "off       - Revert to native Pi status bar & clean settings",
 ];
 
-export const STYLE_MENU_KEYS = STYLE_MENU.map((line) => line.split(" ")[0].trim());
-
 function revertToNative(ctx: any): void {
   resetRuntime();
   lastRenderedStatus.clear();

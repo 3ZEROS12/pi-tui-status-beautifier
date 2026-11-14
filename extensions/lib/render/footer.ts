@@ -203,8 +203,10 @@ export function renderBeautifiedFooter(
     // Progressive compact: truncate plain branch/model text with sliceToVisualWidth before styling
     if (modelVis > 0) {
       const avail = Math.max(0, width - 1);
-      let rightBudget = Math.min(modelVis, Math.max(6, Math.floor(avail / 2)));
-      let leftBudget = avail - rightBudget;
+      // The 6-cell floor for the model must never exceed the space actually available, or
+      // the branch budget goes negative and the line renders wider than the terminal.
+      let rightBudget = Math.min(modelVis, avail, Math.max(6, Math.floor(avail / 2)));
+      let leftBudget = Math.max(0, avail - rightBudget);
       if (leftVis < leftBudget) {
         rightBudget = Math.min(modelVis, avail - leftVis);
         leftBudget = avail - rightBudget;
@@ -264,13 +266,20 @@ export function renderBeautifiedFooter(
         const compactPlain =
           beautifyStatus(k, v, null, styleKey, customCfg, { compact: true }) || plain;
         const valLower = (v || "").toLowerCase();
+        // Toolflow emits `[1/3] Implementing · ~850 saved` with no state word, so a running
+        // stage used to be folded into `(+N idle)`. Paused/in-flight markers count too.
         const isHigh =
           valLower.includes("error") ||
           valLower.includes("fail") ||
           valLower.includes("warn") ||
           valLower.includes("running") ||
           valLower.includes("active") ||
-          valLower.includes("starting");
+          valLower.includes("starting") ||
+          valLower.includes("working") ||
+          valLower.includes("waiting") ||
+          valLower.includes("implementing") ||
+          /^\[\d+\/\d+\]/.test(valLower) ||
+          valLower.includes("\u25B2");
         return {
           key: k,
           val: v,

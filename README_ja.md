@@ -8,7 +8,7 @@ Pi TUI 向けのミニマリストなステータスバー整形・レイアウ�
 [![npm downloads](https://img.shields.io/npm/dm/pi-tui-status-beautifier?color=22c55e&label=downloads)](https://www.npmjs.com/package/pi-tui-status-beautifier)
 [![GitHub stars](https://img.shields.io/github/stars/3ZEROS12/pi-tui-status-beautifier?style=flat&color=f59e0b)](https://github.com/3ZEROS12/pi-tui-status-beautifier/stargazers)
 [![Built for Pi](https://img.shields.io/badge/Built%20for-Pi%20Coding%20Agent-orange)](https://github.com/earendil-works/pi-coding-agent)
-[![Tests](https://img.shields.io/badge/Tests-69%2F69%20Pass%20(100%25)-brightgreen)](extensions/tui-status-beautifier.spec.ts)
+[![Tests](https://img.shields.io/badge/Tests-79%2F79%20Pass%20(100%25)-brightgreen)](extensions/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 [English](./README.md) | **日本語** | [简体中文](./README_zh.md)
@@ -54,7 +54,7 @@ tmux や WezTerm の分割ペイン（`< 80` カラム）では、長すぎる�
 
 ### 3. システム本来のテレメトリを奪わない（`status-only`）
 `ctx.ui.setFooter` でフッター全体を置き換えるプラグインは、Git ブランチ名、トークン消費量（`↑1.2k ↓3.4k`）、キャッシュ率、思考レベル（`• high`）まで消してしまいます。
-本拡張機能はデフォルトで**非侵襲マイクロフック（`status-only`）**として動作し、ネイティブのシステム指標を 100% 残したまま拡張バッジのみを整形します。
+本拡張機能はデフォルトで**2 行統合フッター（`fullFooter: true`、`claude` プリセット）**として動作し、ネイティブのシステム指標を 100% 残したまま拡張バッジのみを整形します。
 
 ### 4. 描画ループ内のディスク I/O ゼロ
 高頻度の TUI 再描画ループ内で設定ファイルを同期読み込み（`fs.readFileSync`）すると、タイピング遅延の原因になります。
@@ -67,13 +67,19 @@ tmux や WezTerm の分割ペイン（`< 80` カラム）では、長すぎる�
 `/beautify` で以下の 6 スタイルをリアルタイムに切り替えられます：
 
 ```text
-  1. stream (デフォルト・ミニマリストストリーム)
-     chrome ❯ ● ready    toolflow ❯ ⌬ 2/5    anchor ❯ ⌖ 3    plan ❯ ◆ 1
+  1. claude (デフォルト・Anthropic 暖色ミニマルドット)
+     chrome · ● ready    toolflow · ⌬ 2/5    anchor · ⌖ 3    plan · ◆ 1
 
-  2. nord (アングルブラケット＆幾何学グリフ)
+  2. openai (GPT スレート＆エメラルド幾何トークン)
+  3. gemini (Google 星屑スパークル)
+  4. linear (Linear / Raycast 精密シェブロン)
+  5. tokyo (ミッドナイト枠＆スターアクセント)
+  6. nord (アングルブラケット＆幾何学グリフ)
      chrome ‹◆ ready›    toolflow ‹◈ 2/5›    anchor ‹⌖ 3›    plan ‹◆ 1›
-
-  3. tokyo (ミッドナイト枠＆スターアクセント)
+  7. stream (クリーンなシェブロン)
+     chrome ❯ ● ready    toolflow ❯ ⌬ 2/5    anchor ❯ ⌖ 3    plan ❯ ◆ 1
+  8. minimal (10 桁固定ガター)
+  9. glow (高コントラスト反転ピル)
      chrome ⦗✦ ready⦘    toolflow ⦗✧ 2/5⦘    anchor ⦗⌖ 3⦘    plan ⦗✦ 1⦘
 
   4. glow (高コントラスト反転ピルバッジ)
@@ -101,7 +107,7 @@ tmux や WezTerm の分割ペイン（`< 80` カラム）では、長すぎる�
 ## 検証とテスト
 
 ```bash
-npm run check       # 型チェック + Lint + 72 ユニットテスト、すべてグリーン
+npm run check       # 型チェック + Lint + 79 ユニットテスト、すべてグリーン
 ```
 
 ---

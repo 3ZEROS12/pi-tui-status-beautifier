@@ -8,7 +8,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/pi-tui-status-beautifier?color=22c55e&label=downloads)](https://www.npmjs.com/package/pi-tui-status-beautifier)
 [![GitHub stars](https://img.shields.io/github/stars/3ZEROS12/pi-tui-status-beautifier?style=flat&color=f59e0b)](https://github.com/3ZEROS12/pi-tui-status-beautifier/stargazers)
 [![Built for Pi](https://img.shields.io/badge/Built%20for-Pi%20Coding%20Agent-orange)](https://github.com/earendil-works/pi-coding-agent)
-[![Tests](https://img.shields.io/badge/Tests-69%2F69%20Pass%20(100%25)-brightgreen)](extensions/tui-status-beautifier.spec.ts)
+[![Tests](https://img.shields.io/badge/Tests-79%2F79%20Pass%20(100%25)-brightgreen)](extensions/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 [English](./README.md) | [日本語](./README_ja.md) | **简体中文**
@@ -54,7 +54,7 @@ pi install npm:pi-tui-status-beautifier
 
 ### 3. 绝不劫持系统原生遥测数据
 许多底栏美化工具采用粗暴的全局覆盖，把 Pi 原生的 Git 分支、Token 消耗（`↑1.2k ↓3.4k`）、上下文缓存率和思考级别（`• high`）全部冲掉。
-本扩展默认采用**非侵入式微钩子（status-only）**：仅规范化插件状态徽章，Pi 原生的所有底层遥测数据 100% 原样保留。
+本扩展默认启用**两行统一底栏（`fullFooter: true`，`claude` 预设）**；执行 `/beautify <style> status` 可收窄为**非侵入式微钩子（status-only）**：仅规范化插件状态徽章，Pi 原生的所有底层遥测数据 100% 原样保留。
 
 ### 4. 渲染循环 0 磁盘 I/O 损耗
 在终端高频重绘动画中读取配置，极易引发磁盘 I/O 争用与打字卡顿。
@@ -70,9 +70,9 @@ pi install npm:pi-tui-status-beautifier
 
 | 模式 / 场景 | 你做什么 | 插件幕后动作 | 底栏最终呈现 | 适用场景 |
 | :--- | :--- | :--- | :--- | :--- |
-| **`stream`** *(默认极简)* | 正常安装各扩展 | 剥离冗长包名与杂乱符号，规范徽章 | `plan ❯ ◆ 3  mcp ❯ ● ready  anchor ❯ ⌖ 3` | 干净极简，日常主力推荐 |
+| **`stream`** *(极简)* | 正常安装各扩展 | 剥离冗长包名与杂乱符号，规范徽章 | `plan ❯ ◆ 3  mcp ❯ ● ready  anchor ❯ ⌖ 3` | 干净极简，日常主力推荐 |
 | **窄分屏自适应** | tmux 分屏宽度 `< 80` 列 | 识别活跃状态，自动折叠就绪状态 | `toolflow ❯ ⌬ running (2/5)  (+3 idle)` | 多分屏防挤压折行 |
-| **`full-footer`** *(全景)* | 开启全量底栏模式 | 接管两行底栏，第一行系统遥测，第二行徽章 | 行 1: 目录/Git/Token/模型；行 2: 规范徽章 | 极客全景视窗 |
+| **`full-footer`** *(默认)* | 开启全量底栏模式 | 接管两行底栏，第一行系统遥测，第二行徽章 | 行 1: 目录/Git/Token/模型；行 2: 规范徽章 | 极客全景视窗 |
 | **`off`** *(彻底还原)* | 运行 `/beautify off` | 物理删除 `settings.json` 中的 `beautifier` 键 | 100% 还原原生底栏，零残留 | 随时无痛试用与反悔 |
 
 ---
@@ -82,16 +82,23 @@ pi install npm:pi-tui-status-beautifier
 键入 `/beautify` 即可实时交互切换不同风格：
 
 ```text
-  1. stream (默认极简流式)
-     chrome ❯ ● ready    toolflow ❯ ⌬ 2/5    anchor ❯ ⌖ 3    plan ❯ ◆ 1
+  1. claude    (默认：Anthropic 暖调极简圆点)
+     chrome · ● ready    toolflow · ⌬ 2/5    anchor · ⌖ 3    plan · ◆ 1
 
-  2. nord (尖角分界与几何徽记)
-     chrome ‹◆ ready›    toolflow ‹◈ 2/5›    anchor ‹⌖ 3›    plan ‹◆ 1›
-
-  3. tokyo (午夜微框与星标)
+  2. openai    (GPT 岩板翡翠几何标记)
+  3. gemini    (Google 星辉闪光渐变)
+  4. linear    (Linear / Raycast 精密折角)
+  5. tokyo     (午夜微框与星标)
      chrome ⦗✦ ready⦘    toolflow ⦗✧ 2/5⦘    anchor ⦗⌖ 3⦘    plan ⦗✦ 1⦘
 
-  4. glow (高对比度反色胶囊)
+  6. nord      (尖角分界与几何徽记)
+     chrome ‹◆ ready›    toolflow ‹◈ 2/5›    anchor ‹⌖ 3›    plan ‹◆ 1›
+
+  7. stream    (极简流式折角)
+     chrome ❯ ● ready    toolflow ❯ ⌬ 2/5    anchor ❯ ⌖ 3    plan ❯ ◆ 1
+
+  8. minimal   (固定 10 列对齐流式)
+  9. glow      (高对比度反色胶囊)
      chrome [ ● ready ]  toolflow [ ⌬ 2/5 ]  anchor [ ⌖ 3 ]  plan [ ◆ 1 ]
 
   5. minimal (10 列等宽排版流)
@@ -106,7 +113,7 @@ pi install npm:pi-tui-status-beautifier
 ## 核心特性与工程机制
 
 - 🛡️ **非侵入式双层作用域**：
-  * `status-only`（默认推荐）：仅规范化插件徽章，100% 完整保留 Pi 原生 Git 分支、Token 遥测与思考级别；
+  * `status-only`（可选，`/beautify <style> status` 切换）：仅规范化插件徽章，100% 完整保留 Pi 原生 Git 分支、Token 遥测与思考级别；
   * `full-footer`（深度一体化）：重构底栏为两行式布局，第一行系统状态，第二行插件状态。
 - 📐 **Unicode UAX #11 与代理对安全**：内置独立字符宽度扫描器，精确计算东亚宽字符（2 列）、ASCII（1 列）与 ANSI 控制序列（0 列），彻底消除光标抖动与排版错位。
 - ⚡ **渲染循环 0 磁盘 I/O**：会话启动时将配置加载至内存，重绘循环 0 磁盘读取；对相同状态执行 Dirty-Checking 缓存，避免重复构建字符串。
@@ -158,7 +165,7 @@ pi install npm:pi-tui-status-beautifier
 ## 质量验证
 
 ```bash
-npm run check       # 类型检查 + Lint + 72 个单元测试，全部通过
+npm run check       # 类型检查 + Lint + 79 个单元测试，全部通过
 ```
 
 ---

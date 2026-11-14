@@ -123,11 +123,30 @@ export function sliceToVisualWidth(str: string, maxWidth: number): string {
   let width = 0;
   let sliced = "";
   let pendingZwj = false;
+  let lastBase = -1;
 
   for (const char of str) {
     const code = char.codePointAt(0) || 0;
     if (code === 0x200d) {
       if (sliced.length > 0) pendingZwj = true;
+      continue;
+    }
+    // FE0F promotes a dingbat base to two cells in getStringWidth, so the same cell must be
+    // charged here; otherwise the slice can measure wider than the budget it was given.
+    if (code === 0xfe0f) {
+      const promotes = lastBase >= EMOJI_PRESENTATION_BASE_MIN && lastBase <= EMOJI_PRESENTATION_BASE_MAX;
+      if (promotes) {
+        if (width + 1 > maxWidth) break;
+        width += 1;
+      }
+      if (sliced.length > 0) sliced += char;
+      continue;
+    }
+    // Keycap sequences (base + FE0F + 20E3) are two cells: the enclosing keycap is that second cell.
+    if (code === 0x20e3) {
+      if (width + 1 > maxWidth) break;
+      width += 1;
+      if (sliced.length > 0) sliced += char;
       continue;
     }
     if (isZeroWidthCode(code)) {
@@ -137,6 +156,7 @@ export function sliceToVisualWidth(str: string, maxWidth: number): string {
     if (pendingZwj) {
       sliced += "\u200d" + char;
       pendingZwj = false;
+      lastBase = code;
       continue;
     }
     const charWidth = isFullWidth(code) ? 2 : 1;
@@ -146,6 +166,7 @@ export function sliceToVisualWidth(str: string, maxWidth: number): string {
     }
     width += charWidth;
     sliced += char;
+    lastBase = code;
   }
 
   return sliced;

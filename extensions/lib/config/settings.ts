@@ -119,14 +119,18 @@ export function loadConfig(cwd?: string): ResolvedConfig {
 
 export function sanitizeCustomConfig(raw: any): CustomStyleConfig | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  // Clamp by code point: UTF-16 slicing can end on a lone surrogate and render as U+FFFD.
   const clampStr = (v: unknown, maxLen = 16): string | undefined =>
-    typeof v === "string" ? v.slice(0, maxLen) : undefined;
+    typeof v === "string" ? [...v].slice(0, maxLen).join("") : undefined;
   const brackets =
     Array.isArray(raw.brackets) &&
     raw.brackets.length === 2 &&
     typeof raw.brackets[0] === "string" &&
     typeof raw.brackets[1] === "string"
-      ? ([raw.brackets[0].slice(0, 4), raw.brackets[1].slice(0, 4)] as [string, string])
+      ? ([[...raw.brackets[0]].slice(0, 4).join(""), [...raw.brackets[1]].slice(0, 4).join("")] as [
+          string,
+          string,
+        ])
       : undefined;
   const rawGlyphs =
     raw.glyphs && typeof raw.glyphs === "object" && !Array.isArray(raw.glyphs) ? raw.glyphs : undefined;

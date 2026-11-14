@@ -8,7 +8,7 @@ Clean up fragmented extension status strings. Enjoy adaptive narrow-terminal fol
 [![npm downloads](https://img.shields.io/npm/dm/pi-tui-status-beautifier?color=22c55e&label=downloads)](https://www.npmjs.com/package/pi-tui-status-beautifier)
 [![GitHub stars](https://img.shields.io/github/stars/3ZEROS12/pi-tui-status-beautifier?style=flat&color=f59e0b)](https://github.com/3ZEROS12/pi-tui-status-beautifier/stargazers)
 [![Built for Pi](https://img.shields.io/badge/Built%20for-Pi%20Coding%20Agent-orange)](https://github.com/earendil-works/pi-coding-agent)
-[![Tests](https://img.shields.io/badge/Tests-69%2F69%20Pass%20(100%25)-brightgreen)](extensions/tui-status-beautifier.spec.ts)
+[![Tests](https://img.shields.io/badge/Tests-79%2F79%20Pass%20(100%25)-brightgreen)](extensions/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 **English** | [日本語](./README_ja.md) | [简体中文](./README_zh.md)
@@ -54,7 +54,7 @@ The built-in column budget guard automatically collapses idle badges into `(+3 i
 
 ### 3. Never Hijacks Platform Telemetry
 Many status bar plugins take a heavy-handed approach: completely replacing Pi's native footer via `ctx.ui.setFooter`. In doing so, they wipe out essential system metrics—git branches, token counts (`↑1.2k ↓3.4k`), cache read rates, and thinking levels (`• high`).
-This extension defaults to a **non-intrusive micro-hook (`status-only`)**: it normalizes extension badges while leaving Pi's native system telemetry 100% intact.
+This extension ships with the unified two-line footer (`fullFooter: true`, `claude` preset); run `/beautify <style> status` to narrow it to the **non-intrusive micro-hook (`status-only`)**: it normalizes extension badges while leaving Pi's native system telemetry 100% intact.
 
 ### 4. Zero Render-Loop Disk I/O
 Reading configuration files synchronously inside high-frequency TUI animation redraw loops causes disk contention and sluggish typing.
@@ -70,9 +70,9 @@ This extension loads settings into memory at startup and uses dirty-checking cac
 
 | Mode / Scenario | What You Do | What the Beautifier Does | What You See | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **`stream`** *(Default)* | Install extensions normally | Strips package prefixes and normalizes badges | `plan ❯ ◆ 3  mcp ❯ ● ready  anchor ❯ ⌖ 3` | Minimalist everyday pairing |
+| **`stream`** *(Alternate)* | Install extensions normally | Strips package prefixes and normalizes badges | `plan ❯ ◆ 3  mcp ❯ ● ready  anchor ❯ ⌖ 3` | Minimalist everyday pairing |
 | **Narrow Split Panes** | tmux split width `< 80` cols | Preserves active badges, condenses idle items | `toolflow ❯ ⌬ running (2/5)  (+3 idle)` | Split panes without line wrap |
-| **`full-footer`** *(Panorama)* | Enable full footer mode | Formats unified two-line layout | Line 1: Git/Token/Model; Line 2: Normalized badges | Geek panoramic overview |
+| **`full-footer`** *(Default)* | Enable full footer mode | Formats unified two-line layout | Line 1: Git/Token/Model; Line 2: Normalized badges | Geek panoramic overview |
 | **`off`** *(Clean Revert)* | Run `/beautify off` | Physically deletes `beautifier` key from `settings.json` | 100% native unformatted status bar, 0 residue | Zero-regret testing |
 
 ---
@@ -82,22 +82,26 @@ This extension loads settings into memory at startup and uses dirty-checking cac
 Type `/beautify` to switch styles interactively:
 
 ```text
-  1. stream (Default Minimalist Stream)
-     chrome ❯ ● ready    toolflow ❯ ⌬ 2/5    anchor ❯ ⌖ 3    plan ❯ ◆ 1
+  1. claude    (Default: Anthropic warm minimalist dots)
+     chrome · ● ready    toolflow · ⌬ 2/5    anchor · ⌖ 3    plan · ◆ 1
 
-  2. nord (Angled Brackets & Distinct Glyphs)
-     chrome ‹◆ ready›    toolflow ‹◈ 2/5›    anchor ‹⌖ 3›    plan ‹◆ 1›
-
-  3. tokyo (Midnight Brackets & Star Accents)
+  2. openai    (GPT slate emerald geometric tokens)
+  3. gemini    (Google celestial sparkle gradients)
+  4. linear    (Linear / Raycast precision chevrons)
+  5. tokyo     (Midnight Brackets & Star Accents)
      chrome ⦗✦ ready⦘    toolflow ⦗✧ 2/5⦘    anchor ⦗⌖ 3⦘    plan ⦗✦ 1⦘
 
-  4. glow (High-Contrast Inverse Pill Badges)
+  6. nord      (Angled Brackets & Distinct Glyphs)
+     chrome ‹◆ ready›    toolflow ‹◈ 2/5›    anchor ‹⌖ 3›    plan ‹◆ 1›
+
+  7. stream    (Clean stream chevron)
+     chrome ❯ ● ready    toolflow ❯ ⌬ 2/5    anchor ❯ ⌖ 3    plan ❯ ◆ 1
+
+  8. minimal   (Fixed 10-Column Aligned Stream)
+  9. glow      (High-Contrast Inverse Pill Badges)
      chrome [ ● ready ]  toolflow [ ⌬ 2/5 ]  anchor [ ⌖ 3 ]  plan [ ◆ 1 ]
 
-  5. minimal (Fixed 10-Column Aligned Stream)
-     chrome     ❯ ● ready    toolflow   ❯ ⌬ 2/5    anchor     ❯ ⌖ 3
-
-  6. custom (AI-Assisted Co-Design)
+ 10. custom    (AI-Assisted Co-Design)
      Describe your aesthetic in plain text; your agent generates 3 ASCII mockups.
 ```
 
@@ -106,8 +110,8 @@ Type `/beautify` to switch styles interactively:
 ## Engineering Highlights
 
 - 🛡️ **Non-Destructive Dual Scopes**:
-  * `status-only` (Default & Recommended): Only hooks `ctx.ui.setStatus` badges. Preserves Pi's native Git branch, working directory, token counts, and thinking levels 100% untouched.
-  * `full-footer`: Formats the entire bottom bar with system telemetry on line 1 and badges on line 2.
+  * `status-only` (opt-in via `/beautify <style> status`): Only hooks `ctx.ui.setStatus` badges. Preserves Pi's native Git branch, working directory, token counts, and thinking levels 100% untouched.
+  * `full-footer` (Default): Formats the entire bottom bar with system telemetry on line 1 and badges on line 2.
 - 📐 **Unicode UAX #11 & Surrogate-Pair Safety**: Built-in character scanner accurately measures East Asian Wide (2 cols), ASCII (1 col), and ANSI escape codes (0 cols), eliminating cursor jitter and column misalignments.
 - ⚡ **Zero Render-Loop Disk I/O**: Loads configuration once into memory. Redraw loops perform zero synchronous disk reads (`fs.readFileSync`), using dirty-checking to skip duplicate renders.
 - ◐ **Terminal Micro-Spinners**: Active background tasks (`running`, `working`) trigger a smooth 300ms spinner (`◐`, `◓`, `◑`, `◒`).
@@ -158,7 +162,7 @@ A good status bar should be quiet, balanced, and invisible until you need it.
 ## Verification & Testing
 
 ```bash
-npm run check       # typecheck + lint + 72 Vitest unit tests, all green
+npm run check       # typecheck + lint + 79 Vitest unit tests, all green
 ```
 
 ---
