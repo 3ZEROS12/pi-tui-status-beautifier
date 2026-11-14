@@ -40,8 +40,12 @@ export function isTestEnvironment(): boolean {
 export function settingsPaths(cwd?: string): SettingsPaths {
   const effectiveCwd = cwd || process.cwd();
   const home = process.env.HOME || process.env.USERPROFILE || "";
+  const agentDir =
+    process.env.PI_CODING_AGENT_DIR ||
+    process.env.PI_CONFIG_DIR ||
+    path.join(home, ".pi", "agent");
   return {
-    globalPath: path.join(home, ".pi/agent/settings.json"),
+    globalPath: path.join(agentDir, "settings.json"),
     localPath: path.join(effectiveCwd, ".pi/settings.json"),
   };
 }
@@ -91,8 +95,8 @@ export function loadConfig(cwd?: string): ResolvedConfig {
   // caller explicitly passed a cwd.
   const skipGlobal = isTestEnvironment() && cwd === undefined;
 
-  let style = "minimal";
-  let fullFooter = false;
+  let style = "claude";
+  let fullFooter = true;
   let custom: CustomStyleConfig | undefined;
 
   if (!skipGlobal) {
@@ -150,7 +154,16 @@ function atomicWriteJson(filePath: string, value: unknown): void {
   const tempPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
   try {
     fs.writeFileSync(tempPath, JSON.stringify(value, null, 2), "utf-8");
-    fs.renameSync(tempPath, filePath);
+    try {
+      fs.renameSync(tempPath, filePath);
+    } catch {
+      try {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      } catch {
+        // Ignore locked target before rename retry.
+      }
+      fs.renameSync(tempPath, filePath);
+    }
   } catch (error) {
     try {
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);

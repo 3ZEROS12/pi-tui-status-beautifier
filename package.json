@@ -1,6 +1,6 @@
 {
   "name": "pi-tui-status-beautifier",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Clean up your Pi terminal status bar — formats extension badges with crisp presets (Claude, OpenAI, Gemini, Linear, Tokyo, Nord, Stream, Minimal, Glow), folds idle items on narrow screens, and adds live spinners.",
   "main": "extensions/tui-status-beautifier.ts",
   "keywords": [

@@ -120,6 +120,13 @@ describe("TUI Status Beautifier Tests", () => {
       expect(nord).toContain("◆");
       expect(nord).toContain("›");
     });
+    it("should extract toolflow saved tokens metrics cleanly", () => {
+      const output = beautifyStatus("toolflow", "⌬ ~1.4k saved (2 logs, 1 hit)", mockTheme, "claude");
+      expect(output).toContain("toolflow");
+      expect(output).toContain("⌬");
+      expect(output).toContain("~1.4k saved");
+    });
+
 
     it("should render custom style using configuration object", () => {
       const customCfg = {
@@ -559,6 +566,23 @@ describe("TUI Status Beautifier Tests", () => {
       const cleanNarrow = narrowLines[1].replace(/\[\/?\w+\]/g, "");
       expect(cleanNarrow).toContain("toolflow");
       expect(cleanNarrow).toContain("(+2 idle)");
+    });
+
+    it("beautifies ToolFlow v5.0.0 token-savings and pi-lingual direct/spec-ok status badges with ecosystem glyphs", () => {
+      const res = beautifyStatus(
+        "toolflow",
+        "ToolFlow Saved: ~1.2k tokens (3 dehydrated, 2 cache hits)",
+        mockTheme,
+        "claude"
+      );
+      expect(res).toBeDefined();
+      expect(res).toContain("⌬");
+      expect(res).toContain("1.2k");
+
+      const directRes = beautifyStatus("lingual", "[en · direct]", mockTheme, "tokyo");
+      expect(directRes).toContain("⦗");
+      expect(directRes).toContain("⇄");
+      expect(directRes).toContain("en · direct");
     });
   });
 });

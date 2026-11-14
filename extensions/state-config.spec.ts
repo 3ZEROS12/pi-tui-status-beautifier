@@ -323,8 +323,8 @@ describe("One-shot /beautify command arguments", () => {
     expect(cfg.fullFooter).toBe(true);
   });
 
-  it("prompts for scope when only style is provided", async () => {
-    const selectMock = vi.fn().mockResolvedValue("status-only - Plugin status badges only");
+  it("applies /beautify tokyo directly preserving active scope without prompting", async () => {
+    const selectMock = vi.fn();
     const mockCtx = {
       hasUI: true,
       cwd: project,
@@ -336,12 +336,12 @@ describe("One-shot /beautify command arguments", () => {
       },
     };
 
+    runtime.fullFooter = true;
     await runBeautify(null, "tokyo", mockCtx);
 
-    expect(selectMock).toHaveBeenCalledTimes(1);
-    expect(selectMock).toHaveBeenCalledWith("Choose beautification scope:", expect.any(Array));
+    expect(selectMock).not.toHaveBeenCalled();
     expect(runtime.style).toBe("tokyo");
-    expect(runtime.fullFooter).toBe(false);
+    expect(runtime.fullFooter).toBe(true);
   });
 
   it("supports aliases status-only and full-footer", async () => {

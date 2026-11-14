@@ -16,9 +16,10 @@ import { runtime } from "../state";
 
 // Hoisted regex patterns to prevent instantiation and GC overhead in the render hot-path
 const STATUS_PATTERN =
-  /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋⌬★✦◇»«‹›⦗⦘⌖⇄]|[0-9]+\/[0-9]+|\b(?:active|online|offline|running|paused|error|success|connected|disconnected|ready|idle|ok|done|failed|waiting|stopped|listening|cleanup|starting)\b/i;
+  /[🟢🔴🟡⚪⏸✅❌✓✗?✔✖☑☐◆📋⌬★✦◇»«‹›⦗⦘⌖⇄]|[0-9]+\/[0-9]+|\b(?:active|online|offline|running|paused|error|success|connected|disconnected|ready|idle|ok|done|failed|waiting|stopped|listening|cleanup|starting|tokens?\s+saved|~?\d+(?:\.\d+)?[kKmM]?\s*saved|guard(?:\s+active)?|cache\s+hits?|[a-z]{2,3}\s*·\s*(?:direct|spec\s+ok))\b/i;
 const NAME_SUFFIX_PATTERN = /-(extension|plugin|assistant|adapter|slash-text|slash|text|widget)$/gi;
-const LANG_PAIR_PATTERN = /([a-z]{2,3}\s*⇄\s*[a-z]{2,3}(?:\s*·\s*[^\r\n]+)?)/i;
+const LANG_PAIR_PATTERN = /([a-z]{2,3}\s*⇄\s*[a-z]{2,3}(?:\s*·\s*[^\r\n]+)?|\b[a-z]{2,3}\s*·\s*(?:direct|spec\s+ok)\b)/i;
+const SAVED_METRIC_PATTERN = /(~?\d+(?:\.\d+)?[kKmM]\s+saved|\bguard\s+active\b|\bguard\b)/i;
 const FRACTION_PATTERN = /(\d+\/\d+|\d+%\s*)/;
 const SIGNED_UNIT_PATTERN = /([+-]?\d+(?:\.\d+)?[kKmM]\b|[+-]\d+(?:\.\d+)?%?)/;
 const DELTA_METRIC_PATTERN = /([+-]\d+(?:\.\d+)?[kKmM]\b|[+-]\d+(?:\.\d+)?%?)/;
@@ -110,6 +111,12 @@ export function beautifyStatus(
       const langMatch = cleanVal.match(LANG_PAIR_PATTERN);
       if (langMatch) {
         details = langMatch[1].trim();
+      }
+    }
+    if (!details) {
+      const savedMatch = cleanVal.match(SAVED_METRIC_PATTERN);
+      if (savedMatch) {
+        details = savedMatch[1].trim();
       }
     }
 

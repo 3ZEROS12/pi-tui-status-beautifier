@@ -18,8 +18,8 @@ export interface RuntimeState {
 }
 
 export const runtime: RuntimeState = {
-  style: "minimal",
-  fullFooter: false,
+  style: "claude",
+  fullFooter: true,
   targetSettingsPath: "",
 };
 

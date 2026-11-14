@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.9.0] - 2026-11-14
+
+### Changed
+- Default visual preset changed from `minimal` to `claude` (Anthropic serene minimal dots with warm high-signal dot markers).
+- `fullFooter` is now enabled by default (`true`), offering out-of-the-box 3-tier badge compaction, Git branch, and token telemetry formatting without manual configuration.
+- `/beautify <style>` single-argument invocation now switches the visual preset immediately while preserving the active scope, eliminating modal interruption. Scope can still be explicitly targeted via `/beautify <style> full` or `/beautify <style> status`.
+
+### Added
+- Enhanced ecosystem status metric recognition for ToolFlow token savings (`~1.4k saved`) and guard active states.
+- Comprehensive unit test suite expanded to 68 tests passing (100% green).
+
 ## [1.8.0] - 2026-10-18
 
 ### Changed

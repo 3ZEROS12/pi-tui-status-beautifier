@@ -65,7 +65,7 @@ function buildCustomInstruction(userDesire: string): string {
     `User's requested aesthetic: "${userDesire}"`,
     "",
     "Requirements:",
-    `1. In the user's primary language, call \`ask_user_question\` with 3 distinct ASCII visual preview mockups tailored to "${userDesire}". Show ONLY realistic extension status items (e.g. \`chrome\`, \`toolflow\`, \`plan\`). Do NOT include git branch or model name in mockups.`,
+    `1. In the user's primary language, present 3 distinct ASCII visual preview mockups tailored to "${userDesire}". Show ONLY realistic extension status items (e.g. \`chrome\`, \`toolflow\`, \`plan\`). Do NOT include git branch or model name in mockups.`,
     "2. Once selected, save the configuration into `./.pi/settings.json` (or `~/.pi/agent/settings.json`) under `beautifier`:",
     "   {",
     '     "beautifier": {',
@@ -141,10 +141,13 @@ export async function runBeautify(pi: any, args: string | undefined, ctx: any): 
     isFullFooter = false;
   } else if (secondToken === "full" || secondToken === "full-footer") {
     isFullFooter = true;
+  } else if (firstToken) {
+    // Direct style switch preserves active scope without prompting
+    isFullFooter = runtime.fullFooter;
   } else {
     const scopeOptions = [
-      "status-only - Plugin status badges only (Recommended: keeps native Pi path, tokens & thinking level)",
-      "full-footer - Full-footer beautification (Transforms Git branch, model, and tokens too)",
+      "full-footer - Full-footer beautification (Transforms Git branch, model, tokens & 3-tier badge compaction)",
+      "status-only - Plugin status badges only (Keeps native Pi path, tokens & thinking level)",
     ];
 
     const scopeChoice = await ctx.ui.select("Choose beautification scope:", scopeOptions);
