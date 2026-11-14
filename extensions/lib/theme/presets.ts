@@ -144,6 +144,25 @@ export const STYLE_ALIASES: Record<string, string> = {
 
 export const OFF_STYLES = new Set(["off", "default", "none", "raw", "vanilla", "disable", "disabled"]);
 
+/** Separator glyphs dimmed when a theme provides `fg`; plain ASCII separators stay bare. */
+const DIMMABLE_SEPARATOR_GLYPHS = ["│", "⁝", "❯", "»"];
+
+/**
+ * The separator a preset implies. Two renderers and their inverse-pill branch all used to
+ * spell this expression out; one definition keeps the footer and badges in lockstep.
+ */
+export function resolveSeparator(preset: CustomStyleConfig): string {
+  if (typeof preset.separator === "string" && preset.separator) return preset.separator;
+  return preset.brackets ? " " : " ❯ ";
+}
+
+/** Dims glyph separators, leaves plain separators untouched. */
+export function styleSeparator(sep: string, theme: any): string {
+  const dimmed = Boolean(theme && typeof theme.fg === "function");
+  const isGlyph = DIMMABLE_SEPARATOR_GLYPHS.some((glyph) => sep.includes(glyph));
+  return dimmed && isGlyph ? theme.fg("dim", sep) : sep;
+}
+
 /**
  * Canonicalises a raw style key: trims, lowercases, expands aliases and
  * normalises every off-synonym to "off". Unknown keys pass through untouched

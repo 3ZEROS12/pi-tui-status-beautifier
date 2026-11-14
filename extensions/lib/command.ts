@@ -15,19 +15,27 @@ import {
 import { applyConfig, lastRenderedStatus, originalStatuses, resetRuntime, runtime } from "./state";
 import { createFooterFactory } from "./render/footer";
 
-export const STYLE_MENU: string[] = [
-  "claude    - Anthropic warm minimalist dots (e.g. name · ● ready)",
-  "openai    - GPT slate emerald geometric tokens (e.g. name ⦋▪ ready⦌)",
-  "gemini    - Google celestial sparkle gradients (e.g. name ✧✦ ready)",
-  "linear    - Linear / Raycast precision chevrons (e.g. name ❯ ● ready)",
-  "tokyo     - Tokyo Night cyberpunk brackets & stars (e.g. name ⦗✦ ready⦘)",
-  "nord      - Nordic arctic frost chevrons (e.g. name ‹◆ ready›)",
-  "stream    - Clean stream chevron (e.g. name ❯ ● ready)",
-  "minimal   - Chevron with a fixed 10-column name gutter",
-  "glow      - High-contrast inverse pill (e.g. name [ ● ready ])",
-  "custom    - Describe your custom aesthetic to AI",
-  "off       - Revert to native Pi status bar & clean settings",
-];
+/**
+ * Menu blurbs, keyed by style. The menu is generated from VALID_STYLES so a new preset can
+ * never be selectable in `settings.json` but missing from the picker (or drift in order).
+ */
+const STYLE_BLURBS: Record<(typeof VALID_STYLES)[number], string> = {
+  claude: "Anthropic warm minimalist dots (e.g. name · ● ready)",
+  openai: "GPT slate emerald geometric tokens (e.g. name ⦋▪ ready⦌)",
+  gemini: "Google celestial sparkle gradients (e.g. name ✧✦ ready)",
+  linear: "Linear / Raycast precision chevrons (e.g. name ❯ ● ready)",
+  tokyo: "Tokyo Night cyberpunk brackets & stars (e.g. name ⦗✦ ready⦘)",
+  nord: "Nordic arctic frost chevrons (e.g. name ‹◆ ready›)",
+  stream: "Clean stream chevron (e.g. name ❯ ● ready)",
+  minimal: "Chevron with a fixed 10-column name gutter",
+  glow: "High-contrast inverse pill (e.g. name [ ● ready ])",
+  custom: "Describe your custom aesthetic to AI",
+  off: "Revert to native Pi status bar & clean settings",
+};
+
+export const STYLE_MENU: string[] = VALID_STYLES.map(
+  (style) => `${style.padEnd(9)} - ${STYLE_BLURBS[style]}`
+);
 
 function revertToNative(ctx: any): void {
   resetRuntime();

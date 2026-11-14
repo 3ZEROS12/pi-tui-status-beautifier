@@ -17,6 +17,11 @@ import {
   resetRuntime,
   runtime,
   runBeautify,
+  STYLE_MENU,
+  VALID_STYLES,
+  getPreset,
+  resolveSeparator,
+  styleSeparator,
 } from "./tui-status-beautifier";
 
 const mockTheme = {
@@ -499,5 +504,25 @@ describe("Settings path resolution stays inside the sandbox", () => {
     expect(paths.globalPath.startsWith(home)).toBe(true);
     expect(paths.globalPath).toBe(globalSettings());
     expect(paths.localPath).toBe(path.join(project, ".pi", "settings.json"));
+  });
+});
+
+describe("style surface stays generated, not hand-listed", () => {
+  it("STYLE_MENU covers every selectable style exactly once, in VALID_STYLES order", () => {
+    const menuStyles = STYLE_MENU.map((line) => line.split(" ")[0].trim());
+    expect(menuStyles).toEqual([...VALID_STYLES]);
+  });
+
+  it("every preset resolves to one separator, dimmed only when it is a glyph", () => {
+    const fg = vi.fn((_state: string, text: string) => `<${text}>`);
+    for (const style of VALID_STYLES) {
+      if (style === "custom" || style === "off") continue;
+      const preset = getPreset(style);
+      const sep = resolveSeparator(preset);
+      expect(sep.length).toBeGreaterThan(0);
+      const styled = styleSeparator(sep, { fg });
+      const isGlyph = /[│⁝❯»]/.test(sep);
+      expect(styled).toBe(isGlyph ? `<${sep}>` : sep);
+    }
   });
 });

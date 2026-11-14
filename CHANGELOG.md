@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+- One definition per shared decision: `resolveSeparator`/`styleSeparator` replace the separator expression and the four-glyph dim list that were spelled out in `status.ts` (twice) and `footer.ts`; `resolveActivePreset` replaces two independent custom-preset resolutions, so a style can no longer render differently in the footer and in a badge.
+- The `/beautify` picker and its command description are generated from `VALID_STYLES` plus one blurb table, so a preset cannot be valid yet missing from the menu. `stream` / `glow` / `minimal` now follow the table order.
+- `SIGNED_UNIT_PATTERN` and `DELTA_METRIC_PATTERN` were byte-identical; the two bracket-count patterns merged, and the duplicated success branch in state inference is now the `else` it always was.
+
 ### Fixed
 - Sub-1k savings metrics are recognized: Toolflow emits `~850 saved` and `~0 saved` without a unit, and the savings pattern required one, so a fresh install rendered `⌬ (0)` and a staged badge silently dropped the metric.
 - Writing `settings.json` can no longer delete it: when the target was locked, the writer unlinked it before a second rename that could also fail. The fallback now overwrites in place, so a failed write leaves the previous file untouched.
@@ -15,7 +20,7 @@
 - Width decisions no longer use UTF-16 `.length` as a proxy, and ANSI is stripped before the 512-unit cap (a bisected escape used to leak `38;5` style parameters into the metric).
 - `sanitizeCustomConfig` clamps by code point, so a clamped string can no longer end on a lone surrogate.
 - README/AGENTS default claims match the shipped `claude` + `fullFooter: true` defaults, and release tooling stages `extensions/` wholesale instead of a hand-copied entry file that could not load.
-- Unit test suite expanded to 79 tests passing (100% green).
+- Unit test suite expanded to 81 tests passing (100% green).
 
 ## [1.9.1] - 2026-11-14
 

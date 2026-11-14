@@ -7,13 +7,14 @@ import {
   COMMON_NAMES,
   CustomStyleConfig,
   SPINNERS,
-  getPreset,
+  resolveSeparator,
   resolveStyleKey,
+  styleSeparator,
   OFF_STYLES,
 } from "../theme/presets";
 import { ANSI_STRIP_REGEX, getStringWidth, padToVisualWidth, sliceToVisualWidth } from "../core/width";
 import { runtime } from "../state";
-import { sanitizeCustomConfig } from "../config/settings";
+import { resolveActivePreset } from "../config/settings";
 
 // Hoisted regex patterns to prevent instantiation and GC overhead in the render hot-path
 const STATUS_PATTERN =
@@ -24,10 +25,9 @@ const LANG_PAIR_PATTERN = /([a-z]{2,3}\s*⇄\s*[a-z]{2,3}(?:\s*·\s*[^\r\n]+)?|\
 // suffix must be optional here exactly as it already is in STATUS_PATTERN.
 const SAVED_METRIC_PATTERN = /(~?\d+(?:\.\d+)?[kKmM]?\s+saved|\bguard\s+active\b|\bguard\b)/i;
 const FRACTION_PATTERN = /(\d+\/\d+|\d+%\s*)/;
+// Signed deltas and signed units were two byte-identical patterns; one source of truth.
 const SIGNED_UNIT_PATTERN = /([+-]?\d+(?:\.\d+)?[kKmM]\b|[+-]\d+(?:\.\d+)?%?)/;
-const DELTA_METRIC_PATTERN = /([+-]\d+(?:\.\d+)?[kKmM]\b|[+-]\d+(?:\.\d+)?%?)/;
-const PARENTHESES_PATTERN = /\((\d+)\)/;
-const BRACKET_PATTERN = /\[(\d+)\]/;
+const COUNT_PATTERN = /[[(](\d+)[)\]]/;
 const NUMBER_PATTERN = /\b(\d+)\b/;
 const WORD_STATE_PATTERN =
   /(?::\s*|\b)(ready|idle|ok|done|failed|waiting|cleanup|active|online|offline|running|paused|error|success|connected|disconnected|listening|stopped|starting)\b/i;
@@ -102,10 +102,7 @@ export function beautifyStatus(
     }
     // Disk data reaches this point unsanitized (footer passes the raw custom block through),
     // and a malformed value like `separator: 12` used to throw and reset every badge.
-    const preset = getPreset(
-      styleKey,
-      styleKey === "custom" ? sanitizeCustomConfig(customCfg || runtime.custom || {}) : customCfg
-    );
+    const { preset } = resolveActivePreset(styleKey, customCfg, runtime.custom);
 
     const isCompact = options?.compact === true;
     const visualName =
@@ -138,7 +135,7 @@ export function beautifyStatus(
     if (!details) {
       const fractionMatch = cleanVal.match(FRACTION_PATTERN);
       if (fractionMatch) {
-        const deltaMatch = cleanVal.match(DELTA_METRIC_PATTERN);
+        const deltaMatch = cleanVal.match(SIGNED_UNIT_PATTERN);
         if (deltaMatch) {
           details = `${fractionMatch[1].trim()} · ${deltaMatch[1].trim()}`;
         } else {
@@ -149,7 +146,7 @@ export function beautifyStatus(
         if (metricMatch) {
           details = metricMatch[1].trim();
         } else {
-          const countMatch = cleanVal.match(PARENTHESES_PATTERN) || cleanVal.match(BRACKET_PATTERN);
+          const countMatch = cleanVal.match(COUNT_PATTERN);
           if (countMatch) {
             details = countMatch[1];
           } else {
@@ -173,7 +170,7 @@ export function beautifyStatus(
     }
 
     // 3. Determine state based on colors, icons, emojis or text keywords in original val
-    let state: "success" | "warning" | "error" | "accent" = "success";
+    let state: "success" | "warning" | "error" | "accent";
     const valLower = cleanVal.toLowerCase();
 
     if (
@@ -197,19 +194,9 @@ export function beautifyStatus(
       valLower.includes("cleanup")
     ) {
       state = "warning";
-    } else if (
-      valLower.includes("🟢") ||
-      valLower.includes("✅") ||
-      valLower.includes("✓") ||
-      valLower.includes("online") ||
-      valLower.includes("success") ||
-      valLower.includes("ready") ||
-      valLower.includes("idle") ||
-      valLower.includes("ok") ||
-      valLower.includes("done")
-    ) {
-      state = name === "plan" ? "accent" : "success";
     } else {
+      // Everything that is not error/warning reads as success, except the plan badge, which
+      // stays accent. The former explicit success branch restated this fallback verbatim.
       state = name === "plan" ? "accent" : "success";
     }
 
@@ -250,17 +237,13 @@ export function beautifyStatus(
     const closeBracket = preset.brackets?.[1] ?? "";
     const prefix = preset.prefix ?? "";
     const suffix = preset.suffix ?? "";
-    const sep = preset.separator ?? (preset.brackets ? " " : " ❯ ");
+    const sep = resolveSeparator(preset);
 
     // Inverse pill badge (glow preset)
     if (preset.inverse && theme && typeof theme.inverse === "function") {
       const pillContent = ` ${glyph}${details ? ` ${details}` : ""} `;
       const coloredBadge = hasThemeFg ? theme.inverse(theme.fg(state, pillContent)) : `[${pillContent}]`;
-      const inverseSep =
-        hasThemeFg && (sep.includes("│") || sep.includes("⁝") || sep.includes("❯") || sep.includes("»"))
-          ? theme.fg("dim", sep)
-          : sep;
-      return `${prefix}${dimmedName}${inverseSep}${coloredBadge}${suffix}`;
+      return `${prefix}${dimmedName}${styleSeparator(sep, theme)}${coloredBadge}${suffix}`;
     }
 
     let badge = coloredGlyph;
@@ -276,12 +259,7 @@ export function beautifyStatus(
       badge = `${coloredGlyph}${detailStr}`;
     }
 
-    const styledSep =
-      hasThemeFg && (sep.includes("│") || sep.includes("⁝") || sep.includes("❯") || sep.includes("»"))
-        ? theme.fg("dim", sep)
-        : sep;
-
-    return `${prefix}${dimmedName}${styledSep}${badge}${suffix}`;
+    return `${prefix}${dimmedName}${styleSeparator(sep, theme)}${badge}${suffix}`;
   } catch {
     return originalVal;
   }

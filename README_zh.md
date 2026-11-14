@@ -8,7 +8,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/pi-tui-status-beautifier?color=22c55e&label=downloads)](https://www.npmjs.com/package/pi-tui-status-beautifier)
 [![GitHub stars](https://img.shields.io/github/stars/3ZEROS12/pi-tui-status-beautifier?style=flat&color=f59e0b)](https://github.com/3ZEROS12/pi-tui-status-beautifier/stargazers)
 [![Built for Pi](https://img.shields.io/badge/Built%20for-Pi%20Coding%20Agent-orange)](https://github.com/earendil-works/pi-coding-agent)
-[![Tests](https://img.shields.io/badge/Tests-79%2F79%20Pass%20(100%25)-brightgreen)](extensions/)
+[![Tests](https://img.shields.io/badge/Tests-81%2F81%20Pass%20(100%25)-brightgreen)](extensions/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 [English](./README.md) | [日本語](./README_ja.md) | **简体中文**
@@ -165,7 +165,7 @@ pi install npm:pi-tui-status-beautifier
 ## 质量验证
 
 ```bash
-npm run check       # 类型检查 + Lint + 79 个单元测试，全部通过
+npm run check       # 类型检查 + Lint + 81 个单元测试，全部通过
 ```
 
 ---

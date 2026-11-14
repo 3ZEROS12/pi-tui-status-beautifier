@@ -8,11 +8,11 @@
  */
 
 import * as path from "path";
-import { CustomStyleConfig, getPreset, resolveStyleKey } from "../theme/presets";
+import { CustomStyleConfig, resolveSeparator, styleSeparator } from "../theme/presets";
 import { getStringWidth, sliceToVisualWidth } from "../core/width";
 import { formatFoldedBadges, Badge } from "../core/fold";
 import { beautifyStatus } from "./status";
-import { sanitizeCustomConfig } from "../config/settings";
+import { resolveActivePreset } from "../config/settings";
 import { originalStatuses, runtime } from "../state";
 
 interface Totals {
@@ -88,23 +88,13 @@ export function renderBeautifiedFooter(
   style: string,
   customCfg?: CustomStyleConfig
 ): string[] {
-  const styleKey = resolveStyleKey(style);
-  const preset =
-    styleKey === "custom"
-      ? sanitizeCustomConfig(customCfg) || sanitizeCustomConfig(runtime.custom) || {}
-      : getPreset(styleKey, undefined, "minimal");
+  // The footer falls back to `minimal` for unknown keys; badge rendering falls back to
+  // `stream`. Both now go through one resolver, so only the fallback differs.
+  const { styleKey, preset } = resolveActivePreset(style, customCfg, runtime.custom, "minimal");
 
   const hasThemeFg = theme && typeof theme.fg === "function";
-  const sep =
-    typeof preset.separator === "string" && preset.separator
-      ? preset.separator
-      : preset.brackets
-        ? " "
-        : " ❯ ";
-  const styledSep =
-    hasThemeFg && (sep.includes("│") || sep.includes("⁝") || sep.includes("❯") || sep.includes("»"))
-      ? theme.fg("dim", sep)
-      : sep;
+  const sep = resolveSeparator(preset);
+  const styledSep = styleSeparator(sep, theme);
 
   // 1. Folder & Git branch
   const branch = typeof footerData?.getGitBranch === "function" ? footerData.getGitBranch() : "";

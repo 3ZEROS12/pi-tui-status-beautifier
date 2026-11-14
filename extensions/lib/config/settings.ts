@@ -13,6 +13,8 @@ import {
   OFF_STYLES,
   STYLE_ALIASES,
   VALID_STYLES,
+  getPreset,
+  resolveStyleKey,
 } from "../theme/presets";
 
 export interface ResolvedConfig {
@@ -115,6 +117,25 @@ export function loadConfig(cwd?: string): ResolvedConfig {
   const targetSettingsPath = fs.existsSync(localPath) ? localPath : globalPath;
 
   return { style, fullFooter, custom, targetSettingsPath };
+}
+
+/**
+ * Style key + preset in one call. Both renderers used to resolve the custom preset
+ * themselves — status.ts with `sanitize(customCfg || runtime.custom)` and footer.ts with a
+ * three-way `||` chain, so the same style could render two different ways.
+ */
+export function resolveActivePreset(
+  style: string,
+  customCfg?: CustomStyleConfig,
+  customFallback?: CustomStyleConfig,
+  presetFallback = "stream"
+): { styleKey: string; preset: CustomStyleConfig } {
+  const styleKey = resolveStyleKey(style);
+  const preset =
+    styleKey === "custom"
+      ? sanitizeCustomConfig(customCfg) || sanitizeCustomConfig(customFallback) || {}
+      : getPreset(styleKey, undefined, presetFallback);
+  return { styleKey, preset };
 }
 
 export function sanitizeCustomConfig(raw: any): CustomStyleConfig | undefined {

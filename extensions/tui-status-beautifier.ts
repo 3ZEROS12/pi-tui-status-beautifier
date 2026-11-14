@@ -4,6 +4,7 @@ import { loadConfig } from "./lib/config/settings";
 import { createFooterFactory } from "./lib/render/footer";
 import { applyConfig, lastRenderedStatus, originalStatuses, runtime } from "./lib/state";
 import { runBeautify } from "./lib/command";
+import { VALID_STYLES } from "./lib/theme/presets";
 
 // Public surface kept on the entry module so tests and downstream imports keep
 // resolving from a single path.
@@ -22,7 +23,16 @@ export {
   normalizeStoredStyle,
 } from "./lib/config/settings";
 export { runtime, applyConfig, resetRuntime } from "./lib/state";
-export { BUILTIN_PRESETS, VALID_STYLES, STYLE_ALIASES, OFF_STYLES, resolveStyleKey, getPreset } from "./lib/theme/presets";
+export {
+  BUILTIN_PRESETS,
+  VALID_STYLES,
+  STYLE_ALIASES,
+  OFF_STYLES,
+  resolveStyleKey,
+  resolveSeparator,
+  styleSeparator,
+  getPreset,
+} from "./lib/theme/presets";
 export { runBeautify, STYLE_MENU } from "./lib/command";
 export type { CustomStyleConfig } from "./lib/theme/presets";
 export type { ResolvedConfig } from "./lib/config/settings";
@@ -74,8 +84,7 @@ export default function (pi: ExtensionAPI) {
 
   // Dynamic status bar style controller registry
   pi.registerCommand("beautify", {
-    description:
-      "Choose TUI status bar style or customize with AI (/beautify [claude|openai|gemini|linear|tokyo|nord|stream|minimal|glow|custom|off])",
+    description: `Choose TUI status bar style or customize with AI (/beautify [${VALID_STYLES.join("|")}])`,
     handler: async (args: string, ctx: any) => {
       await runBeautify(pi, args, ctx);
     },
